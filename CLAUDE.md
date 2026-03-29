@@ -118,7 +118,11 @@ AA_ProjektTemplateStart/
 
 | File | Purpose |
 |------|---------|
-| `{path}` | {description} |
+| `CLAUDE.md` | Projekt-Regeln, Tech Stack, Plugin-Doku |
+| `.gitignore` | Ignoriert Synology @eaDir, OS-Dateien, Python-Cache |
+| `.claude/commands/prime.md` | Session-Start: Workspace verstehen inkl. Plugin-Status |
+| `.claude/commands/shutdown.md` | Session-Ende: Aufräumen, Committen, Zusammenfassung |
+| `.claude/context/` | Kontext-Dateien (Business, Personal, Strategie, Daten) |
 
 ---
 
