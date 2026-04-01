@@ -1,5 +1,6 @@
 # Synology NAS metadata
 @eaDir/
+.nfs*
 
 # OS
 .DS_Store
@@ -8,6 +9,15 @@ Thumbs.db
 # Python
 __pycache__/
 *.pyc
+.venv/
+*.egg-info/
+
+# uv
+uv.lock
+.python-version
+
+# Environment
+.env
 
 # Temp
 *.tmp
