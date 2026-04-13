@@ -17,6 +17,17 @@
         "width": 900,
         "height": 650,
         "visible": false
+      },
+      {
+        "label": "overlay",
+        "url": "overlay.html",
+        "width": 220,
+        "height": 60,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "transparent": true,
+        "skipTaskbar": true,
+        "visible": false
       }
     ],
     "security": { "csp": null },
