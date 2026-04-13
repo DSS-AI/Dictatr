@@ -1,6 +1,7 @@
 pub mod audio;
 pub mod config;
 pub mod error;
+pub mod history;
 pub mod hotkey;
 pub mod inject;
 pub mod llm;
