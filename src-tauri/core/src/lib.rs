@@ -5,3 +5,4 @@ pub mod hotkey;
 pub mod inject;
 pub mod secrets;
 pub mod state;
+pub mod transcription;
