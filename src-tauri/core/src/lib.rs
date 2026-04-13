@@ -3,6 +3,7 @@ pub mod config;
 pub mod error;
 pub mod hotkey;
 pub mod inject;
+pub mod llm;
 pub mod secrets;
 pub mod state;
 pub mod transcription;
