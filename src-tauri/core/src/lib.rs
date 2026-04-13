@@ -5,6 +5,7 @@ pub mod history;
 pub mod hotkey;
 pub mod inject;
 pub mod llm;
+pub mod orchestrator;
 pub mod secrets;
 pub mod state;
 pub mod transcription;

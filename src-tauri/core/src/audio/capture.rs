@@ -22,6 +22,16 @@ impl AudioCapture {
         }
     }
 
+    /// Construct an `AudioCapture` using pre-existing shared `Arc` handles.
+    ///
+    /// Used by `AudioController::spawn` to share the level meter and ring
+    /// buffer with the controller before the audio thread is started, without
+    /// ever moving an `AudioCapture` (which holds a `!Send` `Stream`) across
+    /// thread boundaries.
+    pub fn with_shared(level: Arc<Mutex<f32>>, buffer: Arc<Mutex<RingBuffer>>) -> Self {
+        Self { stream: None, buffer, level }
+    }
+
     pub fn list_input_devices() -> Result<Vec<String>> {
         let host = cpal::default_host();
         let devices = host.input_devices().map_err(|e| AppError::Audio(e.to_string()))?;
