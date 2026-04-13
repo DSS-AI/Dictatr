@@ -23,3 +23,10 @@ uv.lock
 *.tmp
 *.bak
 *.log
+
+# Tauri / Node
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+.vite/
