@@ -43,6 +43,7 @@ export interface General {
   mic_device: string | null;
   remote_whisper_url: string;
   show_tooltips: boolean;
+  check_updates: boolean;
 }
 
 export interface AppConfig {

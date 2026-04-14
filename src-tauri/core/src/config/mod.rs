@@ -34,6 +34,8 @@ pub struct General {
     pub remote_whisper_url: String,
     #[serde(default = "default_true")]
     pub show_tooltips: bool,
+    #[serde(default = "default_true")]
+    pub check_updates: bool,
 }
 
 impl Default for General {
@@ -47,6 +49,7 @@ impl Default for General {
             mic_device: None,
             remote_whisper_url: default_remote_whisper_url(),
             show_tooltips: true,
+            check_updates: true,
         }
     }
 }

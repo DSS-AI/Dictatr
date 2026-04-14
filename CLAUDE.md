@@ -155,12 +155,20 @@ Stand Phase 1 MVP: **24 Rust-Unit-Tests grün** (Ringbuffer, Resample, State-Mac
 - SQLite-History, OS-Keyring für API-Keys
 - Text-Injection via enigo mit Clipboard-Fallback
 
-### Deferred auf Phase 2 / externen Host
+### MSI-Build — 2026-04-14 verifiziert
 
-- **Server-Endpoint `/api/dictate`** in DSS-V-A-Transcribe (nur mit User-Freigabe; Projekt darf nicht ohne Weisung verändert werden)
-- **MSI-Installer** (nur auf Windows-Host baubar)
+MSI wurde via `bun run tauri build` auf dem Windows-Host erstellt, auf einem frischen Windows-11-Test-Rechner installiert und erfolgreich gestartet.
+
+### Phase 2 — Auto-Updater (2026-04-14)
+
+- `tauri-plugin-updater` + `tauri-plugin-process`, `plugins.updater`-Endpoint in `tauri.conf.json` auf `https://github.com/DSS-AI/Dictatr/releases/latest/download/latest.json`
+- Auto-Check beim App-Start (abschaltbar via `general.check_updates`), manueller Button im Allgemein-Tab, `UpdateBanner` mit Download-Progress + Relaunch
+- Release-Prozess in [`docs/RELEASE.md`](docs/RELEASE.md) dokumentiert — **primär:** GitHub-Actions-Workflow (`.github/workflows/release.yml`) triggert auf `v*`-Tag-Push und baut signiert auf `windows-latest`; **Fallback:** manueller Build vom Windows-Host
+- Einmaliges Setup: `bunx @tauri-apps/cli signer generate` auf Windows, Pubkey in `tauri.conf.json`, Private Key + Passwort als Repo-Secrets (`TAURI_SIGNING_PRIVATE_KEY` / `_PASSWORD`) und lokal als User-Env-Vars
+
+### Deferred auf Phase 3
+
 - **macOS-Port** (Accessibility-Permissions, Notarization)
-- **Auto-Updater** (Tauri-Updater)
 - **Kontext-aware Prompts** + Command-Mode
 
 ---
@@ -187,7 +195,7 @@ Stand Phase 1 MVP: **24 Rust-Unit-Tests grün** (Ringbuffer, Resample, State-Mac
 - **Branch-Strategie:** `master` enthält den initialen Template-Stand + Design-Docs. `feat/phase1-mvp` ist der aktuelle Arbeitszweig. PR/Merge nach Windows-Build-Verifikation.
 - **Build-Abhängigkeiten auf Linux:** cpal braucht `libasound2-dev`, enigo braucht `libxdo-dev`, whisper-rs braucht `cmake` + `clang` + `libclang-dev` (nicht alle auf diesem Debian-Host installiert — Builds auf Windows-Host verschieben, wo MSVC alles mitbringt).
 - **Vom NAS-Mount bauen ist verboten:** Build-Artefakte gehören nicht auf die NAS (Locking + Performance). Unter Windows lokal nach `C:\Dev\Dictatr\` klonen.
-- **DSS-V-A-Transcribe bleibt unangetastet:** Das Remote-Whisper-Backend spricht gegen den bestehenden Port 8503, ein neuer `/api/dictate`-Endpoint wird nur mit ausdrücklicher Freigabe implementiert.
+- **DSS-V-A-Transcribe bleibt unangetastet:** Das Remote-Whisper-Backend spricht gegen den bestehenden Port 8503 als reinen API-Konsumenten. Am DSS-V-A-Transcribe-Code wird von diesem Projekt aus nichts geändert.
 
 ---
 

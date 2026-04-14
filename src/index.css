@@ -195,3 +195,28 @@ th { color: var(--text-dim); font-weight: 600; background: rgba(255, 255, 255, 0
 tr:last-child td { border-bottom: none; }
 
 ::selection { background: var(--primary); color: white; }
+
+/* --- Update banner ------------------------------------------------------- */
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--accent-soft);
+  border: 1px solid var(--field-border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 14px;
+  font-size: 13px;
+}
+.update-banner-body { display: flex; align-items: center; gap: 12px; }
+.update-banner-title { color: var(--accent-strong); font-weight: 600; }
+.update-banner-progress { color: var(--text-dim); }
+.update-banner-error { color: #f0a0a0; }
+.update-banner-actions { display: flex; align-items: center; gap: 4px; }
+.update-banner-actions button { margin: 0; padding: 5px 12px; font-size: 12px; }
+.update-banner-actions button.secondary {
+  padding: 3px 10px;
+  font-size: 16px;
+  line-height: 1;
+}

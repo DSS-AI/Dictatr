@@ -1,5 +1,15 @@
 # Dictatr — Änderungs-Log
 
+## Phase 2 — Auto-Updater (in Arbeit)
+
+- `tauri-plugin-updater` + `tauri-plugin-process` eingebunden (Rust + npm).
+- `tauri.conf.json`: `plugins.updater.endpoints` → `https://github.com/DSS-AI/Dictatr/releases/latest/download/latest.json`; `bundle.publisher = "DSS-Siegmund"`. `pubkey` wird beim Setup auf dem Windows-Host via `bunx @tauri-apps/cli signer generate` gesetzt.
+- Neuer `general.check_updates`-Bool (Default `true`): Silent-Check beim App-Start; deaktivierbar im Allgemein-Tab.
+- `UpdateBanner`-Komponente im Settings-Fenster mit Download-Progress und Relaunch nach Install.
+- Allgemein-Tab zeigt aktuelle Version und „Nach Updates suchen"-Button mit Inline-Statusmeldung.
+- GitHub-Actions-Workflow `.github/workflows/release.yml`: Tag-Push `v*` → baut signiert auf `windows-latest` (LLVM 18, Bun, Cargo-Cache), erstellt Release, lädt MSI + `.msi.sig` + `latest.json` via `tauri-apps/tauri-action@v0` (`includeUpdaterJson: true`).
+- Release-Prozess in `docs/RELEASE.md` dokumentiert — Weg A (CI) als Standard, Weg B (manueller Build) als Fallback.
+
 ## Phase 1 MVP — Session vom 14.04.2026
 
 End-to-End-Pipeline zum Laufen gebracht (Hotkey → Recording → Transkription → Text-Injection), plus mehrere Folge-Features. Alle Commits auf `feat/phase1-mvp`.

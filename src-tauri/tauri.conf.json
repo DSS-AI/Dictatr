@@ -36,6 +36,15 @@
   "bundle": {
     "active": true,
     "targets": "msi",
+    "publisher": "DSS-Siegmund",
     "icon": ["icons/icon.ico"]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/DSS-AI/Dictatr/releases/latest/download/latest.json"
+      ],
+      "pubkey": "REPLACE_WITH_PUBKEY_FROM_TAURI_SIGNER_GENERATE"
+    }
   }
 }
