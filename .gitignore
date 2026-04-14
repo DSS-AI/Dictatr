@@ -19,6 +19,9 @@ uv.lock
 # Environment
 .env
 
+# Claude Code local helpers (context, hooks, skills) — nicht fürs öffentliche Repo
+.claude/
+
 # Temp
 *.tmp
 *.bak
