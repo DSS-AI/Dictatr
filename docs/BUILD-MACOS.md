@@ -71,6 +71,21 @@ Auf stabilem macOS (nicht 26 beta) sind die Env-Vars i.d.R. nicht nötig.
 Das fertige `.app` / `.dmg` liegt in `src-tauri/target/release/bundle/`. Die
 App wird automatisch ad-hoc signiert (`bundle.macOS.signingIdentity: "-"`).
 
+**Pflicht-Schritt nach jedem Build auf macOS 26 beta:**
+
+```bash
+./tools/macos-resign.sh
+# und falls bereits in /Applications installiert:
+./tools/macos-resign.sh /Applications/Dictatr.app
+```
+
+Tauri's Bundler aktiviert Hardened Runtime per Default. Kombination
+Hardened-Runtime + ad-hoc-Signatur blockiert auf macOS 26 TCC-Permission-Dialoge
+(Mikrofon, Bedienungshilfen) stumm — `AVCaptureDevice.requestAccess` resolvet
+als „denied", ohne dass der User den Dialog jemals zu sehen bekommt. Das
+Script entfernt das Runtime-Flag per Re-Sign. Mit Developer-ID entfällt der
+Schritt (Hardened Runtime funktioniert dann korrekt mit Entitlements).
+
 ## Berechtigungen (Systemeinstellungen)
 
 macOS fragt beim ersten Start nach:

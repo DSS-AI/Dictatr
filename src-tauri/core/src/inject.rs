@@ -158,6 +158,47 @@ pub fn prompt_accessibility_if_needed() {
     }
 }
 
+/// Current AVCaptureDevice authorization status for the microphone.
+/// Returns 0=NotDetermined, 1=Restricted, 2=Denied, 3=Authorized.
+#[cfg(target_os = "macos")]
+pub fn microphone_auth_status() -> isize {
+    use std::ffi::CString;
+    use std::os::raw::{c_char, c_void};
+
+    #[link(name = "objc", kind = "dylib")]
+    extern "C" {
+        fn objc_getClass(name: *const c_char) -> *const c_void;
+        fn sel_registerName(name: *const c_char) -> *const c_void;
+        fn objc_msgSend();
+    }
+    #[link(name = "AVFoundation", kind = "framework")]
+    extern "C" {
+        static AVMediaTypeAudio: *const c_void;
+    }
+
+    type MsgSendStatus = unsafe extern "C" fn(
+        *const c_void,
+        *const c_void,
+        *const c_void,
+    ) -> isize;
+
+    unsafe {
+        let class = objc_getClass(CString::new("AVCaptureDevice").unwrap().as_ptr());
+        if class.is_null() {
+            return -1;
+        }
+        let sel = sel_registerName(
+            CString::new("authorizationStatusForMediaType:").unwrap().as_ptr(),
+        );
+        let msg: MsgSendStatus =
+            std::mem::transmute(objc_msgSend as unsafe extern "C" fn());
+        msg(class, sel, AVMediaTypeAudio)
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn microphone_auth_status() -> isize { 3 }
+
 /// Trigger macOS' microphone permission dialog via AVCaptureDevice.
 /// cpal opens CoreAudio streams that silently return zero-filled buffers
 /// when mic access hasn't been granted — whisper then hallucinates "[Musik]"

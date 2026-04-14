@@ -64,6 +64,17 @@ impl TranscriptionBackend for LocalWhisperBackend {
                 params.set_print_progress(false);
                 params.set_print_realtime(false);
                 params.set_print_special(false);
+                // Unterdrücke [Musik], [Zwischenruf], [Applaus] & Co. — Whisper
+                // halluziniert diese Tokens bei Stille oder leiser Aufnahme.
+                params.set_suppress_non_speech_tokens(true);
+                params.set_suppress_blank(true);
+                // Verhindere, dass Whisper den vorherigen Output in den nächsten
+                // Segment-Context mitnimmt — genau das triggert die endlose
+                // Wiederholung ("[Zwischenruf] [Zwischenruf] ...").
+                params.set_no_context(true);
+                params.set_temperature(0.0);
+                // Aggressiveres no-speech-Gating.
+                params.set_no_speech_thold(0.6);
 
                 let start = Instant::now();
                 state
