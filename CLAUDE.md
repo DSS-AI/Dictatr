@@ -188,3 +188,29 @@ Stand Phase 1 MVP: **24 Rust-Unit-Tests grün** (Ringbuffer, Resample, State-Mac
 - **Build-Abhängigkeiten auf Linux:** cpal braucht `libasound2-dev`, enigo braucht `libxdo-dev`, whisper-rs braucht `cmake` + `clang` + `libclang-dev` (nicht alle auf diesem Debian-Host installiert — Builds auf Windows-Host verschieben, wo MSVC alles mitbringt).
 - **Vom NAS-Mount bauen ist verboten:** Build-Artefakte gehören nicht auf die NAS (Locking + Performance). Unter Windows lokal nach `C:\Dev\Dictatr\` klonen.
 - **DSS-V-A-Transcribe bleibt unangetastet:** Das Remote-Whisper-Backend spricht gegen den bestehenden Port 8503, ein neuer `/api/dictate`-Endpoint wird nur mit ausdrücklicher Freigabe implementiert.
+
+---
+
+## Dev-Workflow: Windows als primäre Umgebung
+
+Dictatr wird primär auf einem Windows-Rechner entwickelt (MSVC, `bun run tauri dev` / `build`). Der Linux-Workspace (`/mnt/synology/Coding/DSS-Whisper` auf dem Debian-Host) dient der Codebase-Analyse, Rust-Core-Tests und Claude-Code-Assistenz — er zieht Code vom Remote, pusht aber selten.
+
+### Auto-Sync vom Remote
+
+Bei jedem Claude-Code-Session-Start im Projekt läuft ein `SessionStart`-Hook, der automatisch `git fetch` + `git pull --ff-only` ausführt.
+
+| Komponente | Ort | Zweck |
+|---|---|---|
+| Hook-Definition | `.claude/settings.local.json` (gitignored, lokal) | Verdrahtet den Hook ins Claude-Code-Runtime |
+| Sync-Skript | `.claude/hooks/git-sync.sh` | Führt die Sync-Logik aus (chmod +x erforderlich) |
+
+**Safety-Verhalten:**
+- Clean Working Tree + Commits ahead → Fast-Forward-Pull + Commit-Log-Output
+- Clean + up-to-date → Meldung „up-to-date"
+- Uncommitted Changes → Skip mit Warnung (kein Auto-Merge)
+- Divergent (non-FF) → Skip mit Fehlermeldung (kein Force)
+- Offline → Skip mit „fetch fehlgeschlagen"
+
+**Wenn der Hook nicht greift:** Settings-Watcher liest `.claude/settings.local.json` nur beim Session-Start. `claude` neu starten oder einmal `/hooks` öffnen, um die Config neu zu laden.
+
+**Manuell syncen:** `./.claude/hooks/git-sync.sh` direkt aufrufen.
