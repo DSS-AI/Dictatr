@@ -22,6 +22,12 @@ uv.lock
 # Claude Code local helpers (context, hooks, skills) — nicht fürs öffentliche Repo
 .claude/
 
+# Tauri-Updater-Signing-Keys (darf NIE ins Repo)
+.dictatr/
+updater.key
+updater.key.pub
+*.key
+
 # Temp
 *.tmp
 *.bak
