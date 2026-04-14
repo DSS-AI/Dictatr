@@ -42,11 +42,19 @@ export default function Providers() {
   };
 
   const changeType = (i: number, t: ProviderType) => {
+    const current = cfg.providers[i];
     const preset = PROVIDER_PRESETS[t];
+    const currentPreset = PROVIDER_PRESETS[current.type];
     const patch: Partial<LlmProviderConfig> = { type: t };
+    // Only overwrite fields that still hold the previous preset default — if
+    // the user customized base_url / default_model, keep their value.
     if (preset) {
-      patch.base_url = preset.base_url;
-      patch.default_model = preset.default_model;
+      if (!currentPreset || current.base_url === currentPreset.base_url) {
+        patch.base_url = preset.base_url;
+      }
+      if (!currentPreset || current.default_model === currentPreset.default_model) {
+        patch.default_model = preset.default_model;
+      }
     }
     update(i, patch);
   };

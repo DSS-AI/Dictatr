@@ -68,7 +68,7 @@ fn main() {
             let cfg = config::load().unwrap_or_default();
 
             let remote_url = std::env::var("DICTATR_REMOTE_URL")
-                .unwrap_or_else(|_| "http://192.168.178.43:8000".into());
+                .unwrap_or_else(|_| cfg.general.remote_whisper_url.clone());
             let remote_token = std::env::var("DICTATR_REMOTE_TOKEN").unwrap_or_default();
 
             let remote_backend: Arc<dyn TranscriptionBackend> = Arc::new(
@@ -96,16 +96,18 @@ fn main() {
             };
 
             let mut providers: HashMap<Uuid, Arc<dyn LlmProvider>> = HashMap::new();
+            let mut provider_keys: HashMap<Uuid, (dictatr_core::config::provider::LlmProviderConfig, String)> = HashMap::new();
             for p in &cfg.providers {
                 if let Ok(key) = secrets::get_api_key(p.id) {
                     use dictatr_core::config::provider::ProviderType;
                     let prov: Arc<dyn LlmProvider> = match p.r#type {
-                        ProviderType::Anthropic => Arc::new(AnthropicProvider::new(key)),
+                        ProviderType::Anthropic => Arc::new(AnthropicProvider::new(key.clone())),
                         ProviderType::OpenRouter | ProviderType::Openai
                         | ProviderType::OpenaiCompatible | ProviderType::Ollama =>
-                            Arc::new(OpenAiCompatProvider::new(p.base_url.clone(), key)),
+                            Arc::new(OpenAiCompatProvider::new(p.base_url.clone(), key.clone())),
                     };
                     providers.insert(p.id, prov);
+                    provider_keys.insert(p.id, (p.clone(), key));
                 }
             }
 
@@ -143,10 +145,14 @@ fn main() {
             app.manage(Arc::new(models::DownloadState::new()));
 
             let state = Arc::new(Mutex::new(AppState::Idle));
-            let vocabulary = std::fs::read_to_string(dirs.config_dir().join("vocabulary.txt"))
+            let vocab_path = dirs.config_dir().join("vocabulary.txt");
+            let vocab_initial: Vec<String> = std::fs::read_to_string(&vocab_path)
                 .ok()
                 .map(|s| s.lines().map(|l| l.to_string()).filter(|l| !l.trim().is_empty()).collect())
                 .unwrap_or_default();
+            let vocabulary = Arc::new(Mutex::new(vocab_initial));
+            app.manage(vocabulary.clone());
+            app.manage(commands::VocabularyPath(vocab_path));
             let mic_device = cfg.general.mic_device.clone();
 
             let mut orch = Orchestrator {
@@ -155,6 +161,7 @@ fn main() {
                 remote_backend,
                 local_backend,
                 llm_providers: providers,
+                llm_provider_keys: provider_keys,
                 vocabulary,
                 history: history.clone(),
                 state,
@@ -177,6 +184,8 @@ fn main() {
             commands::start_mic_preview,
             commands::stop_mic_preview,
             commands::get_audio_level,
+            commands::get_vocabulary,
+            commands::save_vocabulary,
             models::get_models_dir,
             models::list_models,
             models::start_model_download,

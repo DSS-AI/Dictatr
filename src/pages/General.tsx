@@ -25,6 +25,12 @@ export default function General() {
         onChange={e => save({ max_recording_seconds: parseInt(e.target.value) || 120 })} /></label>
       <label>History-Länge<input type="number" value={cfg.general.history_limit}
         onChange={e => save({ history_limit: parseInt(e.target.value) || 100 })} /></label>
+      <label>GPU-Server-Adresse (für Backend „GPU-Server")
+        <input value={cfg.general.remote_whisper_url}
+          onChange={e => save({ remote_whisper_url: e.target.value })}
+          placeholder="http://whisper:8000" />
+        <small style={{ color: "#888" }}>Änderung greift nach App-Neustart.</small>
+      </label>
     </div>
   );
 }

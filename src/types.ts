@@ -1,6 +1,11 @@
 export type HotkeyMode = "push_to_talk" | "toggle";
 export type Language = "de" | "en" | "auto";
-export type TranscriptionBackendId = "remote_whisper" | "local_whisper";
+export type TranscriptionBackendId = "remote_whisper" | "local_whisper" | "llm_transcription";
+
+export interface LlmTranscription {
+  llm_provider_id: string | null;
+  model: string | null;
+}
 export type ProviderType = "openai" | "openai_compatible" | "open_router" | "anthropic" | "ollama";
 
 export interface PostProcessing {
@@ -18,6 +23,7 @@ export interface Profile {
   transcription_backend: TranscriptionBackendId;
   language: Language;
   post_processing: PostProcessing;
+  llm_transcription: LlmTranscription;
 }
 
 export interface LlmProviderConfig {
@@ -35,6 +41,7 @@ export interface General {
   max_recording_seconds: number;
   history_limit: number;
   mic_device: string | null;
+  remote_whisper_url: string;
 }
 
 export interface AppConfig {

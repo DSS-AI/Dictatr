@@ -20,6 +20,8 @@ export const ipc = {
   startModelDownload: (name: string) => invoke<void>("start_model_download", { name }),
   getDownloadProgress: () => invoke<DownloadProgress>("get_download_progress"),
   deleteModel: (name: string) => invoke<void>("delete_model", { name }),
+  getVocabulary: () => invoke<string>("get_vocabulary"),
+  saveVocabulary: (text: string) => invoke<void>("save_vocabulary", { text }),
 };
 
 export interface ModelInfo {

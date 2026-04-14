@@ -50,18 +50,24 @@ export default function HotkeyRecorder({ value, onChange }: Props) {
   };
 
   return (
-    <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+    <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
       <input
+        style={{ flex: 1, margin: 0 }}
         readOnly
         value={recording ? "…drücken…" : value}
         onKeyDown={onKey}
         onFocus={() => setRecording(true)}
         onBlur={() => setRecording(false)}
       />
-      <select value="" onChange={pickMultimediaKey} title="Multimedia-/Systemtaste wählen (z. B. LaunchMail)">
+      <select
+        style={{ flex: "0 0 180px", margin: 0 }}
+        value=""
+        onChange={pickMultimediaKey}
+        title="Multimedia-/Systemtaste wählen (z. B. LaunchMail)"
+      >
         <option value="">Systemtaste…</option>
         {MULTIMEDIA_KEYS.map(k => <option key={k} value={k}>{k}</option>)}
       </select>
-    </span>
+    </div>
   );
 }

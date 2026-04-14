@@ -1,5 +1,9 @@
 use dictatr_core::audio::capture::AudioCapture;
 use dictatr_core::audio::controller::AudioController;
+use parking_lot::Mutex;
+use std::path::PathBuf;
+
+pub struct VocabularyPath(pub PathBuf);
 use dictatr_core::config::{self, provider::ProviderType, AppConfig};
 use dictatr_core::history::{HistoryEntry, HistoryStore};
 use dictatr_core::llm::{
@@ -79,6 +83,30 @@ pub async fn start_mic_preview(
 #[tauri::command]
 pub fn get_audio_level(audio: State<'_, Arc<AudioController>>) -> f32 {
     audio.level_snapshot()
+}
+
+#[tauri::command]
+pub fn get_vocabulary(vocab: State<'_, Arc<Mutex<Vec<String>>>>) -> String {
+    vocab.lock().join("\n")
+}
+
+#[tauri::command]
+pub fn save_vocabulary(
+    text: String,
+    vocab: State<'_, Arc<Mutex<Vec<String>>>>,
+    path: State<'_, VocabularyPath>,
+) -> std::result::Result<(), String> {
+    let lines: Vec<String> = text
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect();
+    if let Some(parent) = path.0.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&path.0, lines.join("\n")).map_err(|e| e.to_string())?;
+    *vocab.lock() = lines;
+    Ok(())
 }
 
 #[tauri::command]

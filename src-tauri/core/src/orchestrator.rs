@@ -37,8 +37,12 @@ pub struct Orchestrator {
     pub local_backend: Option<Arc<dyn TranscriptionBackend>>,
     /// Available LLM providers for post-processing, keyed by their UUID.
     pub llm_providers: HashMap<Uuid, Arc<dyn LlmProvider>>,
-    /// Shared vocabulary injected into transcription hints and LLM prompts.
-    pub vocabulary: Vec<String>,
+    /// Raw provider configs + API keys, needed to build on-demand backends
+    /// (currently `LlmTranscriptionBackend`). Keyed by the provider's UUID.
+    pub llm_provider_keys: HashMap<Uuid, (crate::config::provider::LlmProviderConfig, String)>,
+    /// Shared vocabulary injected into transcription hints and LLM prompts;
+    /// live-updatable from the UI (Vocabulary tab) without restarting the app.
+    pub vocabulary: Arc<Mutex<Vec<String>>>,
     /// Persistent transcription history.
     pub history: Arc<HistoryStore>,
     /// Observable application state (Idle / Recording / Transcribing / …).
@@ -145,9 +149,12 @@ impl Orchestrator {
         }
 
         // --- Transcribe ---------------------------------------------------------
+        // Snapshot the vocabulary outside the .await so the MutexGuard (which
+        // is !Send for parking_lot) doesn't cross the suspension point.
+        let vocab_snapshot: Vec<String> = self.vocabulary.lock().clone();
         let backend = self.backend_for(profile)?;
         let transcription = backend
-            .transcribe(&samples, profile.language.clone(), &self.vocabulary)
+            .transcribe(&samples, profile.language.clone(), &vocab_snapshot)
             .await?;
 
         let mut final_text = transcription.text.clone();
@@ -161,7 +168,7 @@ impl Orchestrator {
                 if let Some(provider) = self.llm_providers.get(&provider_id) {
                     let prompt = build_prompt(
                         &transcription.text,
-                        &self.vocabulary,
+                        &vocab_snapshot,
                         profile.post_processing.system_prompt.as_deref(),
                     );
                     match provider.complete(&prompt.system, &prompt.user, model).await {
@@ -215,6 +222,25 @@ impl Orchestrator {
                     "Lokales Whisper-Modell nicht installiert — bitte unter \"Modelle\" herunterladen oder Remote-Backend wählen".into(),
                 )
             }),
+            TranscriptionBackendId::LlmTranscription => {
+                let pid = profile.llm_transcription.llm_provider_id.ok_or_else(|| {
+                    AppError::Transcription("LLM-Provider im Profil nicht gesetzt".into())
+                })?;
+                let (cfg, key) = self.llm_provider_keys.get(&pid).ok_or_else(|| {
+                    AppError::Transcription(
+                        "LLM-Provider hat keinen API-Key oder wurde gelöscht".into(),
+                    )
+                })?;
+                let model = profile.llm_transcription.model.clone()
+                    .filter(|s| !s.trim().is_empty())
+                    .unwrap_or_else(|| cfg.default_model.clone());
+                if model.trim().is_empty() {
+                    return Err(AppError::Transcription("Kein Modell angegeben".into()));
+                }
+                Ok(Arc::new(crate::transcription::llm::LlmTranscriptionBackend::new(
+                    cfg.base_url.clone(), key.clone(), model,
+                )))
+            }
         }
     }
 }

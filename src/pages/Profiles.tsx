@@ -21,6 +21,7 @@ export default function Profiles() {
       transcription_backend: "remote_whisper",
       language: "de",
       post_processing: { enabled: false, llm_provider_id: null, model: null, system_prompt: null },
+      llm_transcription: { llm_provider_id: null, model: null },
     };
     save({ ...cfg, profiles: [...cfg.profiles, p] });
   };
@@ -53,8 +54,28 @@ export default function Profiles() {
             <select value={p.transcription_backend} onChange={e => update(i, { transcription_backend: e.target.value as Profile["transcription_backend"] })}>
               <option value="remote_whisper">GPU-Server</option>
               <option value="local_whisper">Lokal (whisper.cpp)</option>
+              <option value="llm_transcription">LLM-Provider (Chat-Audio)</option>
             </select>
           </label>
+          {p.transcription_backend === "llm_transcription" && (
+            <>
+              <label>LLM-Provider
+                <select value={p.llm_transcription.llm_provider_id ?? ""}
+                  onChange={e => update(i, { llm_transcription: { ...p.llm_transcription, llm_provider_id: e.target.value || null } })}>
+                  <option value="">— wählen —</option>
+                  {cfg.providers.map(pr => <option key={pr.id} value={pr.id}>{pr.name}</option>)}
+                </select>
+              </label>
+              <label>Modell (leer = Default des Providers)
+                <input value={p.llm_transcription.model ?? ""}
+                  onChange={e => update(i, { llm_transcription: { ...p.llm_transcription, model: e.target.value || null } })}
+                  placeholder="z. B. google/gemini-2.5-flash" />
+              </label>
+              <small style={{ color: "#888", display: "block", marginTop: -6, marginBottom: 10 }}>
+                Funktioniert nur mit Modellen, die Audio-Input verstehen (Gemini 2.5 Flash/Pro via OpenRouter, gpt-4o-audio-preview, …).
+              </small>
+            </>
+          )}
           <label>Sprache
             <select value={p.language} onChange={e => update(i, { language: e.target.value as Profile["language"] })}>
               <option value="de">Deutsch</option>

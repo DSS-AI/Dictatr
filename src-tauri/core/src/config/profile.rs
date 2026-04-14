@@ -21,6 +21,19 @@ pub enum Language {
 pub enum TranscriptionBackendId {
     RemoteWhisper,
     LocalWhisper,
+    /// Use a chat-completion LLM with audio input (e.g. Gemini 2.5 Flash via
+    /// OpenRouter, GPT-4o-audio-preview). Configured via `llm_transcription`.
+    LlmTranscription,
+}
+
+fn default_llm_transcription() -> LlmTranscription {
+    LlmTranscription { llm_provider_id: None, model: None }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LlmTranscription {
+    pub llm_provider_id: Option<Uuid>,
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -40,6 +53,8 @@ pub struct Profile {
     pub transcription_backend: TranscriptionBackendId,
     pub language: Language,
     pub post_processing: PostProcessing,
+    #[serde(default = "default_llm_transcription")]
+    pub llm_transcription: LlmTranscription,
 }
 
 impl Profile {
@@ -92,6 +107,7 @@ mod tests {
             post_processing: PostProcessing {
                 enabled: false, llm_provider_id: None, model: None, system_prompt: None,
             },
+            llm_transcription: LlmTranscription { llm_provider_id: None, model: None },
         };
         assert!(p.validate().is_err());
     }
@@ -108,6 +124,7 @@ mod tests {
             post_processing: PostProcessing {
                 enabled: true, llm_provider_id: None, model: None, system_prompt: None,
             },
+            llm_transcription: LlmTranscription { llm_provider_id: None, model: None },
         };
         assert!(p.validate().is_err());
     }

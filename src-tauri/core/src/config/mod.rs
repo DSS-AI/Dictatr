@@ -16,6 +16,10 @@ pub struct AppConfig {
     pub general: General,
 }
 
+fn default_remote_whisper_url() -> String {
+    "http://192.168.178.43:8000".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct General {
     pub autostart: bool,
@@ -24,6 +28,8 @@ pub struct General {
     pub max_recording_seconds: u32,
     pub history_limit: u32,
     pub mic_device: Option<String>,
+    #[serde(default = "default_remote_whisper_url")]
+    pub remote_whisper_url: String,
 }
 
 impl Default for General {
@@ -35,6 +41,7 @@ impl Default for General {
             max_recording_seconds: 120,
             history_limit: 100,
             mic_device: None,
+            remote_whisper_url: default_remote_whisper_url(),
         }
     }
 }
