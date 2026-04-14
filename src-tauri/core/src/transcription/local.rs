@@ -73,6 +73,14 @@ impl TranscriptionBackend for LocalWhisperBackend {
                 // Wiederholung ("[Zwischenruf] [Zwischenruf] ...").
                 params.set_no_context(true);
                 params.set_temperature(0.0);
+                // Aktiviere whisper.cpp's Fallback-Mechanismus: wenn ein Segment
+                // niedrige Token-Entropie hat (= Repeat-Loop) oder niedrige
+                // Confidence, wird es mit höherer Temperature neu dekodiert.
+                // Ohne temperature_inc > 0 gibt es keinen Retry und der Greedy-
+                // Loop bleibt im Output.
+                params.set_temperature_inc(0.2);
+                params.set_entropy_thold(2.8);
+                params.set_logprob_thold(-0.7);
                 // Aggressiveres no-speech-Gating.
                 params.set_no_speech_thold(0.6);
 

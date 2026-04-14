@@ -22,6 +22,7 @@ Das `ggml-small`-Modell halluzinierte bei Stille/leiser Aufnahme Tokens wie `[Mu
 - `no_context(true)` — verhindert, dass sich Halluzinationen über Segmentgrenzen ziehen (der eigentliche Repeat-Loop-Trigger).
 - `temperature(0.0)` — deterministisches Greedy-Sampling.
 - `no_speech_thold(0.6)` — strengeres Silence-Gating.
+- `temperature_inc(0.2)` + `entropy_thold(2.8)` + `logprob_thold(-0.7)` — aktiviert whisper.cpp's Fallback-Mechanismus: Segmente mit niedriger Token-Entropie (= Repeat-Loop wie „Ja, ich habe das. Ja, ich habe das…") oder niedriger Confidence werden mit steigender Temperature (+0.2 bis 1.0) neu dekodiert. Ohne `temperature_inc > 0` gibt es keinen Retry, der Greedy-Loop bleibt als Endergebnis stehen — das war die fehlende Hälfte zum eigentlichen Repeat-Fix.
 
 ## Phase 2 — Auto-Updater (in Arbeit)
 
