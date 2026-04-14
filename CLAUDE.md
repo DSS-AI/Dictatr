@@ -66,37 +66,43 @@ bunx tsc --noEmit
 
 ```
 Dictatr/
-├── .claude/                          # Projekt-lokale Commands/Skills (mostly global now)
-├── CLAUDE.md                         # Diese Datei
-├── package.json                      # Frontend-Deps + Tauri-Skripte
+├── .github/workflows/release.yml     # CI-Release: v*-Tag-Push baut signiert auf windows-latest
+├── CLAUDE.md, README.md              # Projekt-Doku
+├── package.json, bun.lock            # Frontend-Deps + Tauri-Skripte
 ├── tsconfig*.json, vite.config.ts    # TS- und Vite-Konfig
 ├── index.html, public/               # Frontend-Entry, statische Assets
 ├── src/                              # React-App
-│   ├── App.tsx, main.tsx, index.css
-│   ├── ipc.ts, types.ts              # Tauri-IPC-Wrapper
-│   ├── components/                   # HotkeyRecorder, LevelMeter
-│   └── pages/                        # Profiles, Providers, Vocabulary, Audio, General, History
+│   ├── App.tsx, main.tsx, index.css, ipc.ts, types.ts
+│   ├── lib/updater.ts                # Tauri-Updater-Hook (check + downloadAndInstall)
+│   ├── components/                   # HotkeyRecorder, LevelMeter, InfoTip, UpdateBanner
+│   └── pages/                        # Profiles, Providers, Vocabulary, Audio, Models, General, History
 ├── src-tauri/                        # Rust-Workspace-Root + Tauri-Binary
 │   ├── Cargo.toml                    # Workspace + dictatr-binary-Manifest
-│   ├── tauri.conf.json               # Tauri-App-Konfig
+│   ├── tauri.conf.json               # Tauri-App-Konfig (inkl. plugins.updater)
 │   ├── icons/                        # App-Icons (icon.ico, tray-*.png)
-│   ├── src/                          # Tauri-Binary (main.rs, commands.rs, tray.rs, overlay.rs)
+│   ├── src/                          # Tauri-Binary (main.rs, commands.rs, tray.rs, overlay.rs, models.rs)
 │   └── core/                         # dictatr-core Crate (reine Logik, testbar)
 │       ├── Cargo.toml
 │       └── src/
 │           ├── lib.rs
 │           ├── audio/                # capture, controller, ringbuffer
-│           ├── config/               # profile, provider, general
-│           ├── error.rs, state.rs, secrets.rs, hotkey.rs, inject.rs
+│           ├── config/               # profile, provider, general (inkl. check_updates-Flag)
+│           ├── error.rs, state.rs, secrets.rs, hotkey.rs, hotkey_ll.rs, inject.rs
 │           ├── history/              # SQLite-Store
 │           ├── llm/                  # openai_compat, anthropic, prompt
-│           └── transcription/        # remote (GPU-Server), local (whisper.cpp)
+│           ├── transcription/        # remote, local, llm (Chat-Audio)
+│           └── orchestrator.rs
 └── docs/
-    ├── BUILD-WINDOWS.md              # Schritt-für-Schritt Windows-Build-Guide
+    ├── BUILD-WINDOWS.md              # Windows-Build-Guide
+    ├── BUILD-MACOS.md                # macOS-Build-Guide
+    ├── RELEASE.md                    # Release-Prozess (CI primär, manuell Fallback)
+    ├── CHANGELOG.md                  # Versions-Log
     └── superpowers/                  # Design-Spec + Phase-1-Implementation-Plan
         ├── specs/2026-04-13-dss-whisper-dictation-design.md
         └── plans/2026-04-13-dss-whisper-phase1-mvp.md
 ```
+
+`.claude/` (Projekt-lokale Commands/Skills/Context) und `.dictatr/` (Updater-Private-Key auf Windows) sind gitignored und nicht im Repo.
 
 ---
 
