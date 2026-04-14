@@ -21,6 +21,15 @@ Remote-Whisper, lokales whisper.cpp und LLM-Provider mit Audio-Input (Gemini 2.5
 - **History** der letzten Transkripte mit Copy-Icon und Löschen.
 - **Tooltips** bei Hover auf erklärungsbedürftige Felder; abschaltbar unter „Allgemein".
 
+## Download
+
+| Plattform | Installer |
+|-----------|-----------|
+| Windows (x64) | [Aktuelle Release auf GitHub](https://github.com/DSS-AI/Dictatr/releases/latest) — `.msi` herunterladen und ausführen |
+| macOS         | — noch kein Installer (Build aus Source, siehe unten) |
+
+Nach der Installation aktualisiert sich Dictatr bei neuen Releases automatisch (Banner im Settings-Fenster oder Button „Nach Updates suchen" im Allgemein-Tab).
+
 ## Build
 
 | Plattform | Doku |
