@@ -1,4 +1,4 @@
-# DSS-Whisper — Design-Dokument
+# Dictatr — Design-Dokument
 
 **Datum:** 2026-04-13
 **Status:** Draft (zum Review)
@@ -8,7 +8,7 @@
 
 ## 1. Zielsetzung
 
-DSS-Whisper ist eine **leichtgewichtige Desktop-Diktier-App** für Windows (später macOS), die als self-hosted Alternative zu [wisprflow.ai](https://www.wisprflow.ai) dient. Sie läuft im Hintergrund, wird per konfigurierbarem Hotkey aktiviert, transkribiert Sprache in Text und fügt diesen an der aktuellen Cursorposition ein. Der User soll den LLM-Provider frei wählen können — inklusive eigener GPU-Infrastruktur (DSS-V-A-Transcribe auf 192.168.178.43).
+Dictatr ist eine **leichtgewichtige Desktop-Diktier-App** für Windows (später macOS), die als self-hosted Alternative zu [wisprflow.ai](https://www.wisprflow.ai) dient. Sie läuft im Hintergrund, wird per konfigurierbarem Hotkey aktiviert, transkribiert Sprache in Text und fügt diesen an der aktuellen Cursorposition ein. Der User soll den LLM-Provider frei wählen können — inklusive eigener GPU-Infrastruktur (DSS-V-A-Transcribe auf 192.168.178.43).
 
 **Nicht-Ziele:**
 - Kein Cloud-Service / keine Team-Features
@@ -184,7 +184,7 @@ pub trait LlmProvider: Send + Sync {
   "name": "Claude Sonnet",
   "type": "anthropic" | "openai" | "openai_compatible" | "gemini" | "ollama",
   "base_url": "https://api.anthropic.com",
-  "api_key_ref": "keyring:dss-whisper/provider-uuid",
+  "api_key_ref": "keyring:dictatr/provider-uuid",
   "default_model": "claude-sonnet-4-6"
 }
 ```
@@ -202,13 +202,13 @@ pub trait LlmProvider: Send + Sync {
 
 ### 6.4 Konfigurations-Dateien
 
-- `%APPDATA%/DSS-Whisper/config.json` (Profile, Provider-Metadaten, UI-Einstellungen)
-- `%APPDATA%/DSS-Whisper/vocabulary.txt` (eine Zeile pro Begriff)
-- `%APPDATA%/DSS-Whisper/history.db` (SQLite)
+- `%APPDATA%/Dictatr/config.json` (Profile, Provider-Metadaten, UI-Einstellungen)
+- `%APPDATA%/Dictatr/vocabulary.txt` (eine Zeile pro Begriff)
+- `%APPDATA%/Dictatr/history.db` (SQLite)
 - API-Keys: OS-Keyring, Referenz via `api_key_ref` in `config.json`
-- Logs: `%APPDATA%/DSS-Whisper/logs/dss-whisper.log` (rotierend)
+- Logs: `%APPDATA%/Dictatr/logs/dictatr.log` (rotierend)
 
-macOS-Pfad-Äquivalent: `~/Library/Application Support/DSS-Whisper/`
+macOS-Pfad-Äquivalent: `~/Library/Application Support/Dictatr/`
 
 ---
 

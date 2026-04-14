@@ -1,14 +1,14 @@
-# DSS-Whisper Phase 1 MVP Implementation Plan
+# Dictatr Phase 1 MVP Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Eine Tauri-basierte Windows-Desktop-App liefern, die per globalem Hotkey Audio aufnimmt, über einen Remote-Whisper-Server oder lokal transkribiert, optional per LLM nachbearbeitet und den Text an der aktuellen Cursorposition einfügt.
 
-**Architecture:** Tauri 2.x-App mit Rust-Core (State-Machine, Audio, Hotkey, Text-Injection, Backends) und minimaler Webview-UI (Settings, History). Transcription-Backends (`remote-whisper`, `local-whisper`) und LLM-Provider (`openai-compat`, `anthropic`, `ollama`) sind hinter Traits abstrahiert. Konfiguration liegt in `%APPDATA%/DSS-Whisper/config.json`, API-Keys im Windows Credential Manager, History in SQLite.
+**Architecture:** Tauri 2.x-App mit Rust-Core (State-Machine, Audio, Hotkey, Text-Injection, Backends) und minimaler Webview-UI (Settings, History). Transcription-Backends (`remote-whisper`, `local-whisper`) und LLM-Provider (`openai-compat`, `anthropic`, `ollama`) sind hinter Traits abstrahiert. Konfiguration liegt in `%APPDATA%/Dictatr/config.json`, API-Keys im Windows Credential Manager, History in SQLite.
 
 **Tech Stack:** Rust 1.80+, Tauri 2.x, `cpal` (Audio), `global-hotkey`, `enigo` (Keystrokes), `whisper-rs` (lokales Whisper), `reqwest` (HTTP), `rusqlite`, `keyring`, React + TypeScript fürs UI, Vite.
 
-**Referenz-Spec:** [`docs/superpowers/specs/2026-04-13-dss-whisper-dictation-design.md`](../specs/2026-04-13-dss-whisper-dictation-design.md)
+**Referenz-Spec:** [`docs/superpowers/specs/2026-04-13-dictatr-dictation-design.md`](../specs/2026-04-13-dictatr-dictation-design.md)
 
 ---
 
@@ -97,16 +97,16 @@
 - [ ] **Step 1: Tauri-CLI installieren und App scaffolden**
 
 ```bash
-cd /mnt/synology/Coding/DSS-Whisper
+cd /mnt/synology/Coding/Dictatr
 cargo install create-tauri-app --locked
-cargo create-tauri-app --template react-ts --manager bun --identifier de.dss.whisper --name dss-whisper
+cargo create-tauri-app --template react-ts --manager bun --identifier de.dss.whisper --name dictatr
 ```
 
 Wenn das Tool nach Overwrite fragt: nur `src-tauri/`, `src/`, `index.html`, `package.json`, `vite.config.ts`, `tsconfig.json` übernehmen. Bestehende Dateien (`CLAUDE.md`, `docs/`, `pyproject.toml`, `.venv`) nicht anfassen.
 
 - [ ] **Step 2: `.gitignore` ergänzen**
 
-Füge ans Ende von `/mnt/synology/Coding/DSS-Whisper/.gitignore` an:
+Füge ans Ende von `/mnt/synology/Coding/Dictatr/.gitignore` an:
 
 ```
 # Tauri / Node
@@ -123,13 +123,13 @@ src-tauri/gen/
 
 ```json
 {
-  "productName": "DSS-Whisper",
+  "productName": "Dictatr",
   "version": "0.1.0",
   "identifier": "de.dss.whisper",
   "app": {
     "windows": [
       {
-        "title": "DSS-Whisper Settings",
+        "title": "Dictatr Settings",
         "width": 900,
         "height": 650,
         "visible": false
@@ -148,7 +148,7 @@ src-tauri/gen/
 - [ ] **Step 4: Build-Sanity-Check**
 
 ```bash
-cd /mnt/synology/Coding/DSS-Whisper
+cd /mnt/synology/Coding/Dictatr
 bun install
 bun run tauri build --no-bundle
 ```
@@ -471,7 +471,7 @@ tempfile = "3"
 - [ ] **Step 5: Tests ausführen**
 
 ```bash
-cd /mnt/synology/Coding/DSS-Whisper/src-tauri
+cd /mnt/synology/Coding/Dictatr/src-tauri
 cargo test --lib
 ```
 
@@ -509,7 +509,7 @@ Create `src-tauri/src/secrets.rs`:
 use crate::error::{AppError, Result};
 use uuid::Uuid;
 
-const SERVICE: &str = "DSS-Whisper";
+const SERVICE: &str = "Dictatr";
 
 fn key_for(provider_id: Uuid) -> String {
     format!("provider-{}", provider_id)
@@ -555,7 +555,7 @@ Ergänze `mod secrets;` oben in `src-tauri/src/main.rs`.
 - [ ] **Step 4: Build**
 
 ```bash
-cd /mnt/synology/Coding/DSS-Whisper/src-tauri
+cd /mnt/synology/Coding/Dictatr/src-tauri
 cargo build
 ```
 
@@ -671,7 +671,7 @@ Ergänze `mod audio;` in `src-tauri/src/main.rs`.
 - [ ] **Step 3: Tests ausführen**
 
 ```bash
-cd /mnt/synology/Coding/DSS-Whisper/src-tauri
+cd /mnt/synology/Coding/Dictatr/src-tauri
 cargo test --lib audio::ringbuffer
 ```
 
@@ -858,7 +858,7 @@ pub mod ringbuffer;
 - [ ] **Step 3: Tests**
 
 ```bash
-cd /mnt/synology/Coding/DSS-Whisper/src-tauri
+cd /mnt/synology/Coding/Dictatr/src-tauri
 cargo test --lib audio
 ```
 
@@ -1253,7 +1253,7 @@ Expected: JSON-Response mit leerem/kurzem text (bei einem Sinuston), `duration_m
 ```bash
 cd /mnt/synology/Coding/DSS-V-A-Transcribe
 git add server/api/dictate.py .env.example
-git commit -m "feat: add /api/dictate synchronous endpoint for DSS-Whisper"
+git commit -m "feat: add /api/dictate synchronous endpoint for Dictatr"
 ```
 
 ---
@@ -2318,7 +2318,7 @@ export const ipc = {
 - [ ] **Step 4: Build**
 
 ```bash
-cd /mnt/synology/Coding/DSS-Whisper
+cd /mnt/synology/Coding/Dictatr
 bun install
 cargo build --manifest-path src-tauri/Cargo.toml
 ```
@@ -2618,7 +2618,7 @@ pub fn show(app: &AppHandle) -> tauri::Result<()> {
         return Ok(());
     }
     let _ = WebviewWindowBuilder::new(app, "overlay", WebviewUrl::App("overlay.html".into()))
-        .title("DSS-Whisper Overlay")
+        .title("Dictatr Overlay")
         .decorations(false)
         .always_on_top(true)
         .transparent(true)
@@ -2910,12 +2910,12 @@ Schlichtes 256×256-PNG → in `.ico` konvertieren (z.B. via ImageMagick: `magic
 - [ ] **Step 3: Auf Windows-Host bauen**
 
 ```powershell
-cd C:\path\to\DSS-Whisper
+cd C:\path\to\Dictatr
 bun install
 bun run tauri build
 ```
 
-Expected: `src-tauri\target\release\bundle\msi\DSS-Whisper_0.1.0_x64_en-US.msi` entsteht.
+Expected: `src-tauri\target\release\bundle\msi\Dictatr_0.1.0_x64_en-US.msi` entsteht.
 
 - [ ] **Step 4: Installation & Smoke-Test**
 
@@ -2940,7 +2940,7 @@ git commit -m "build: MSI installer config + icon"
 Create `docs/superpowers/plans/release-checklist.md`:
 
 ```markdown
-# DSS-Whisper v0.1 Release-Checkliste
+# Dictatr v0.1 Release-Checkliste
 
 ## Integrations-Punkte
 - [ ] Server-Endpoint `/api/dictate` läuft und antwortet
@@ -3009,7 +3009,7 @@ git commit -m "docs: release checklist for v0.1"
 
 Nach dem Schreiben dieses Plans überprüft:
 
-1. **Spec-Coverage** — alle Sections aus `2026-04-13-dss-whisper-dictation-design.md` abgedeckt:
+1. **Spec-Coverage** — alle Sections aus `2026-04-13-dictatr-dictation-design.md` abgedeckt:
    - §3 Tech-Stack → Task 1-5 (Tauri, cpal, hotkey, enigo), Task 11 (whisper-rs), Task 13 (rusqlite, keyring)
    - §4 Architektur → Task 2 (config), Task 4-5 (audio), Task 10-11 (backends), Task 12 (llm), Task 14 (orchestrator)
    - §5 Ablauf → Task 14 (orchestrator happy path), Release-Checkliste (manuell)
@@ -3034,7 +3034,7 @@ Keine nachträglichen Korrekturen nötig.
 
 ## Execution Handoff
 
-Plan komplett und gespeichert in `docs/superpowers/plans/2026-04-13-dss-whisper-phase1-mvp.md`. Zwei Execution-Optionen:
+Plan komplett und gespeichert in `docs/superpowers/plans/2026-04-13-dictatr-phase1-mvp.md`. Zwei Execution-Optionen:
 
 **1. Subagent-Driven (empfohlen)** — Frischer Subagent pro Task, Review dazwischen, schnelles Iterieren.
 **2. Inline-Execution** — Tasks in dieser Session via `executing-plans`-Skill abarbeiten, Batch mit Checkpoints.

@@ -185,4 +185,4 @@ Wenn's nicht funktioniert: `%APPDATA%\Dictatr\logs\` anschauen (Logs sind aktuel
 
 ## 11. Weiterentwicklungs-Pfad
 
-Siehe `docs/superpowers/plans/2026-04-13-dss-whisper-phase1-mvp.md` für die MVP-Tasks, und `docs/superpowers/specs/2026-04-13-dss-whisper-dictation-design.md` für Phase 2 (macOS, Auto-Update, Command-Mode).
+Siehe `docs/superpowers/plans/2026-04-13-dictatr-phase1-mvp.md` für die MVP-Tasks, und `docs/superpowers/specs/2026-04-13-dictatr-dictation-design.md` für Phase 2 (macOS, Auto-Update, Command-Mode).

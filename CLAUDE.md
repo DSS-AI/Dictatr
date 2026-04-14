@@ -98,8 +98,8 @@ Dictatr/
     ├── RELEASE.md                    # Release-Prozess (CI primär, manuell Fallback)
     ├── CHANGELOG.md                  # Versions-Log
     └── superpowers/                  # Design-Spec + Phase-1-Implementation-Plan
-        ├── specs/2026-04-13-dss-whisper-dictation-design.md
-        └── plans/2026-04-13-dss-whisper-phase1-mvp.md
+        ├── specs/2026-04-13-dictatr-dictation-design.md
+        └── plans/2026-04-13-dictatr-phase1-mvp.md
 ```
 
 `.claude/` (Projekt-lokale Commands/Skills/Context) und `.dictatr/` (Updater-Private-Key auf Windows) sind gitignored und nicht im Repo.
@@ -191,7 +191,7 @@ MSI wurde via `bun run tauri build` auf dem Windows-Host erstellt, auf einem fri
 | `src-tauri/core/src/llm/{openai_compat,anthropic}.rs` | LLM-Provider-Adapter |
 | `src/pages/Profiles.tsx` | Zentrale Settings-UI für Dictation-Profile |
 | `docs/BUILD-WINDOWS.md` | Windows-Build-Guide für neue Umgebungen |
-| `docs/superpowers/specs/2026-04-13-*-design.md` | Design-Dokument (historisch unter DSS-Whisper) |
+| `docs/superpowers/specs/2026-04-13-*-design.md` | Design-Dokument |
 | `docs/superpowers/plans/2026-04-13-*-phase1-mvp.md` | Implementation-Plan mit 20 Tasks |
 
 ---
@@ -207,7 +207,7 @@ MSI wurde via `bun run tauri build` auf dem Windows-Host erstellt, auf einem fri
 
 ## Dev-Workflow: Windows als primäre Umgebung
 
-Dictatr wird primär auf einem Windows-Rechner entwickelt (MSVC, `bun run tauri dev` / `build`). Der Linux-Workspace (`/mnt/synology/Coding/DSS-Whisper` auf dem Debian-Host) dient der Codebase-Analyse, Rust-Core-Tests und Claude-Code-Assistenz — er zieht Code vom Remote, pusht aber selten.
+Dictatr wird primär auf einem Windows-Rechner entwickelt (MSVC, `bun run tauri dev` / `build`). Der Linux-Workspace (`/mnt/synology/Coding/DSS-Dictatr` auf dem Debian-Host) dient der Codebase-Analyse, Rust-Core-Tests und Claude-Code-Assistenz — er zieht Code vom Remote, pusht aber selten.
 
 ### Auto-Sync vom Remote
 
