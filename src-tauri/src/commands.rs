@@ -77,6 +77,27 @@ pub async fn start_mic_preview(
     audio: State<'_, Arc<AudioController>>,
     device: Option<String>,
 ) -> std::result::Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let status = dictatr_core::inject::microphone_auth_status();
+        if status != 3 {
+            // Status 0 = NotDetermined → re-trigger the system dialog now,
+            // in case the startup prompt was swallowed.
+            if status == 0 {
+                dictatr_core::inject::prompt_microphone_if_needed();
+            }
+            let hint = match status {
+                0 => "macOS fragt jetzt nach Mikrofon-Zugriff. Bitte im Dialog auf OK klicken \
+                      und dann erneut auf Mikrofon testen klicken.",
+                1 => "Mikrofon-Zugriff ist durch Systemrichtlinien eingeschränkt (z.B. MDM).",
+                2 => "Mikrofon-Zugriff wurde verweigert. Aktiviere Dictatr unter System Settings → \
+                      Datenschutz & Sicherheit → Mikrofon. Falls Dictatr dort nicht gelistet ist: \
+                      `tccutil reset Microphone de.dss.dictatr` im Terminal ausführen, dann App neu starten.",
+                _ => "Mikrofon-Berechtigung konnte nicht abgefragt werden.",
+            };
+            return Err(hint.to_string());
+        }
+    }
     audio.start_recording(device).await.map_err(|e| e.to_string())
 }
 

@@ -138,12 +138,14 @@ impl Orchestrator {
             crate::sound::play_stop();
         }
         let samples = self.audio.stop_and_drain().await?;
+        eprintln!("[orch] captured {} samples ({:.2}s @16kHz)", samples.len(), samples.len() as f32 / 16000.0);
         {
             let mut s = self.state.lock();
             *s = (*s).apply(Transition::StopRecording);
         }
 
         if samples.is_empty() {
+            eprintln!("[orch] samples empty — skipping transcription");
             *self.state.lock() = AppState::Idle;
             return Ok(());
         }
@@ -153,9 +155,11 @@ impl Orchestrator {
         // is !Send for parking_lot) doesn't cross the suspension point.
         let vocab_snapshot: Vec<String> = self.vocabulary.lock().clone();
         let backend = self.backend_for(profile)?;
+        eprintln!("[orch] transcribing with backend={}", backend.id());
         let transcription = backend
             .transcribe(&samples, profile.language.clone(), &vocab_snapshot)
             .await?;
+        eprintln!("[orch] transcription done: {} chars, {}ms", transcription.text.len(), transcription.duration_ms);
 
         let mut final_text = transcription.text.clone();
 
@@ -187,9 +191,13 @@ impl Orchestrator {
         }
 
         // --- Inject -------------------------------------------------------------
-        if let Err(e) = TextInjector::inject(&final_text) {
-            eprintln!("injection failed, falling back to clipboard: {e:?}");
-            TextInjector::clipboard_fallback(&final_text)?;
+        eprintln!("[orch] injecting {} chars: {:?}", final_text.len(), final_text.chars().take(60).collect::<String>());
+        match TextInjector::inject(&final_text) {
+            Ok(()) => eprintln!("[orch] inject OK"),
+            Err(e) => {
+                eprintln!("injection failed, falling back to clipboard: {e:?}");
+                TextInjector::clipboard_fallback(&final_text)?;
+            }
         }
 
         {

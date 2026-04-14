@@ -1,5 +1,33 @@
 # Dictatr — Änderungs-Log
 
+## Phase 3 — macOS-Port Follow-ups (in Arbeit)
+
+### TCC-Permissions auf macOS 26 beta
+
+- **Root-Cause identifiziert:** Tauri's Bundler aktiviert per Default Hardened Runtime (`--options runtime`). Kombination ad-hoc-Signatur + Hardened Runtime auf macOS 26 blockt TCC-Permission-Dialoge für Mikrofon und Bedienungshilfen **stumm** — `AVCaptureDevice.requestAccess` resolvet als „denied", ohne dass der User den Dialog je sieht. Dictatr taucht in System Settings nie auf, Mic-Test zeigt flachen Pegel-Balken ohne Fehler.
+- **Persistenter Fix:** `tools/macos-resign.sh` re-signiert das Bundle ad-hoc ohne Runtime-Flag. Pflicht-Schritt nach jedem `bun run tauri build` auf macOS 26 beta. Mit Developer-ID-Signatur + Notarization entfällt das.
+- **Diagnose-Rezept:** `codesign -dv <Dictatr.app> | grep flags` — `0x10002(adhoc,runtime)` heißt kaputt, `0x2(adhoc)` heißt OK.
+- `docs/BUILD-MACOS.md` um den Pflicht-Schritt ergänzt.
+
+### Mic-Preview UX
+
+- `start_mic_preview` prüft vor cpal-Start den AVCaptureDevice-Auth-Status (`dictatr_core::inject::microphone_auth_status`) und liefert bei Denied/Restricted einen klaren Fehlertext in die UI statt stumm Null-Buffer durchzureichen. Bei NotDetermined triggert der Command `prompt_microphone_if_needed()`, damit der System-Dialog auch über den Button erzwungen werden kann.
+
+### Whisper-Halluzinations-Fixes (lokales Backend)
+
+Das `ggml-small`-Modell halluzinierte bei Stille/leiser Aufnahme Tokens wie `[Musik]`, `[Zwischenruf]`, `[Applaus]` und geriet in Repeat-Loops (`[Zwischenruf] [Zwischenruf] [Zwischenruf] ...`). `LocalWhisperBackend::transcribe` setzt jetzt:
+
+- `suppress_non_speech_tokens(true)` — unterdrückt Non-Speech-Tags direkt im Sampler.
+- `suppress_blank(true)` — keine leeren Segmente.
+- `no_context(true)` — verhindert, dass sich Halluzinationen über Segmentgrenzen ziehen (der eigentliche Repeat-Loop-Trigger).
+- `temperature(0.0)` — deterministisches Greedy-Sampling.
+- `no_speech_thold(0.6)` — strengeres Silence-Gating.
+- `temperature_inc(0.2)` + `entropy_thold(3.0)` + `logprob_thold(-0.5)` — aktiviert whisper.cpp's Fallback-Mechanismus: Segmente mit niedriger Token-Entropie (= Repeat-Loop wie „Ja, ich habe das. Ja, ich habe das…") oder niedriger Confidence werden mit steigender Temperature (+0.2 bis 1.0) neu dekodiert. Ohne `temperature_inc > 0` gibt es keinen Retry, der Greedy-Loop bleibt als Endergebnis stehen.
+- `SamplingStrategy::BeamSearch { beam_size: 5 }` statt `Greedy` — fundamental robuster gegen Repeat-Loops, besonders bei Utterances unter 2 Sekunden, wo das `small`-Modell auf CPU sonst gerne in Wiederholungen kippt (z. B. „Die Bekleidung wird mit einem Kohlenthalter…" × 7).
+- Post-Filter `collapse_repetitions()` als Safety-Net: erkennt eine Phrase von ≥ 4 Wörtern, die ≥ 3× direkt hintereinander steht, und reduziert sie auf ein Vorkommen. Fängt die Fälle ab, bei denen whisper.cpp's Fallback trotz aller Parameter nicht greift. Unit-getestet.
+- **BeamSearch in whisper-rs 0.12 ist als „WIP" markiert und produziert unabhängige Halluzinationen** (z. B. „Das ist der erste Teil der Strecke." für beliebiges Input). Greedy-Sampler bleibt die einzig brauchbare Strategie in dieser Version.
+- Post-Filter `strip_trailing_hallucinations()`: Whisper ist stark auf YouTube-Audio trainiert und hängt gerne Schlussformeln an Diktate an („Danke fürs Zuschauen", „Untertitel im Auftrag des ZDF", „Abonniert den Kanal", „Bis zum nächsten Video" usw., DE + EN). Wir strippen eine kuratierte Liste von bekannten Trailing-Floskeln, inklusive Lowercase-Match und Trim von umgebender Interpunktion. Unicode-sicherer zeichenweiser Cut für Fälle wie „ß" ≠ „ss".
+
 ## Phase 2 — Auto-Updater (in Arbeit)
 
 - `tauri-plugin-updater` + `tauri-plugin-process` eingebunden (Rust + npm).
