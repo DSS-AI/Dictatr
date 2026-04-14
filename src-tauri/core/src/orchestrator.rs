@@ -26,8 +26,9 @@ use uuid::Uuid;
 /// `AudioController` (which *is* `Send`) and can live inside a normal
 /// `tokio::spawn` task.
 pub struct Orchestrator {
-    /// Async-safe handle to the dedicated audio thread.
-    pub audio: AudioController,
+    /// Async-safe handle to the dedicated audio thread (shared so the UI can
+    /// also drive a mic-level preview via Tauri state).
+    pub audio: Arc<AudioController>,
     /// All configured profiles, keyed by their UUID.
     pub profiles: HashMap<Uuid, Profile>,
     /// Preferred transcription backend (e.g. remote Whisper).

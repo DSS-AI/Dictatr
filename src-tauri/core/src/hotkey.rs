@@ -42,9 +42,17 @@ impl HotkeyRegistry {
     }
 
     pub fn pump_into(&self, tx: UnboundedSender<HotkeyEvent>) {
+        Self::pump(self.by_id.clone(), tx);
+    }
+
+    pub fn id_map(&self) -> HashMap<u32, Uuid> {
+        self.by_id.clone()
+    }
+
+    pub fn pump(by_id: HashMap<u32, Uuid>, tx: UnboundedSender<HotkeyEvent>) {
         let receiver = GlobalHotKeyEvent::receiver();
         while let Ok(event) = receiver.recv() {
-            let profile_id = match self.resolve(event.id) {
+            let profile_id = match by_id.get(&event.id).copied() {
                 Some(id) => id,
                 None => continue,
             };

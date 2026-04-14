@@ -6,6 +6,7 @@ use uuid::Uuid;
 pub enum ProviderType {
     Openai,
     OpenaiCompatible,
+    OpenRouter,
     Anthropic,
     Ollama,
 }

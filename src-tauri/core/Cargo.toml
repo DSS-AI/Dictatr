@@ -10,7 +10,7 @@ thiserror = "1.0"
 uuid = { version = "1", features = ["v4", "serde"] }
 directories = "5"
 anyhow = "1"
-keyring = "3"
+keyring = { version = "3", features = ["windows-native", "apple-native", "linux-native-sync-persistent", "sync-secret-service"] }
 cpal = "0.15"
 parking_lot = "0.12"
 global-hotkey = "0.6"

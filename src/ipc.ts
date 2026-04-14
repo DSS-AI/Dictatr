@@ -9,4 +9,10 @@ export const ipc = {
   listInputDevices: () => invoke<string[]>("list_input_devices"),
   listHistory: (limit: number) => invoke<HistoryEntry[]>("list_history", { limit }),
   deleteHistory: (id: number) => invoke<void>("delete_history", { id }),
+  testLlmProvider: (providerId: string) =>
+    invoke<string>("test_llm_provider", { providerId }),
+  startMicPreview: (device: string | null) =>
+    invoke<void>("start_mic_preview", { device }),
+  stopMicPreview: () => invoke<void>("stop_mic_preview"),
+  getAudioLevel: () => invoke<number>("get_audio_level"),
 };

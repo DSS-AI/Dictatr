@@ -1,7 +1,7 @@
 export type HotkeyMode = "push_to_talk" | "toggle";
 export type Language = "de" | "en" | "auto";
 export type TranscriptionBackendId = "remote_whisper" | "local_whisper";
-export type ProviderType = "openai" | "openai_compatible" | "anthropic" | "ollama";
+export type ProviderType = "openai" | "openai_compatible" | "open_router" | "anthropic" | "ollama";
 
 export interface PostProcessing {
   enabled: boolean;

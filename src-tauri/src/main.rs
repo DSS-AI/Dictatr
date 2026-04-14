@@ -25,6 +25,16 @@ use uuid::Uuid;
 
 fn main() {
     tauri::Builder::default()
+        .on_window_event(|window, event| {
+            // Keep the main window alive when the user closes it — hide instead
+            // of destroy, so the tray icon can always reopen it.
+            if window.label() == "main" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .setup(|app| {
             let handle = app.handle().clone();
             tray::setup(&handle)?;
@@ -39,7 +49,7 @@ fn main() {
             let cfg = config::load().unwrap_or_default();
 
             let remote_url = std::env::var("DICTATR_REMOTE_URL")
-                .unwrap_or_else(|_| "http://192.168.178.43:8503".into());
+                .unwrap_or_else(|_| "http://192.168.178.43:8000".into());
             let remote_token = std::env::var("DICTATR_REMOTE_TOKEN").unwrap_or_default();
 
             let primary: Arc<dyn TranscriptionBackend> = Arc::new(
@@ -67,10 +77,12 @@ fn main() {
             let mut providers: HashMap<Uuid, Arc<dyn LlmProvider>> = HashMap::new();
             for p in &cfg.providers {
                 if let Ok(key) = secrets::get_api_key(p.id) {
+                    use dictatr_core::config::provider::ProviderType;
                     let prov: Arc<dyn LlmProvider> = match p.r#type {
-                        dictatr_core::config::provider::ProviderType::Anthropic =>
-                            Arc::new(AnthropicProvider::new(key)),
-                        _ => Arc::new(OpenAiCompatProvider::new(p.base_url.clone(), key)),
+                        ProviderType::Anthropic => Arc::new(AnthropicProvider::new(key)),
+                        ProviderType::OpenRouter | ProviderType::Openai
+                        | ProviderType::OpenaiCompatible | ProviderType::Ollama =>
+                            Arc::new(OpenAiCompatProvider::new(p.base_url.clone(), key)),
                     };
                     providers.insert(p.id, prov);
                 }
@@ -83,24 +95,20 @@ fn main() {
                 .expect("could not initialize hotkey manager");
             for p in &cfg.profiles {
                 if let Err(e) = registry.register(p.id, &p.hotkey) {
-                    eprintln!("failed to register hotkey {}: {:?}", p.hotkey, e);
+                    eprintln!("failed to register hotkey {} for {}: {:?}", p.hotkey, p.name, e);
                 }
             }
 
             let (tx, rx) = mpsc::unbounded_channel::<HotkeyEvent>();
-            std::thread::spawn(move || registry.pump_into(tx));
+            let id_map = registry.id_map();
+            // GlobalHotKeyManager is !Send (holds an HWND). Keep it alive on the
+            // main thread by leaking it; the pump thread only needs the id map,
+            // since GlobalHotKeyEvent::receiver() is a global channel.
+            let _registry: &'static HotkeyRegistry = Box::leak(Box::new(registry));
+            std::thread::spawn(move || HotkeyRegistry::pump(id_map, tx));
 
-            let audio = AudioController::spawn(cfg.general.max_recording_seconds);
-            let level_ref = audio.level.clone();
-
-            let handle_levels = handle.clone();
-            tauri::async_runtime::spawn(async move {
-                loop {
-                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                    let v = *level_ref.lock();
-                    let _ = handle_levels.emit("audio://level", v);
-                }
-            });
+            let audio = Arc::new(AudioController::spawn(cfg.general.max_recording_seconds));
+            app.manage(audio.clone());
 
             let state = Arc::new(Mutex::new(AppState::Idle));
             let vocabulary = std::fs::read_to_string(dirs.config_dir().join("vocabulary.txt"))
@@ -110,7 +118,7 @@ fn main() {
             let mic_device = cfg.general.mic_device.clone();
 
             let mut orch = Orchestrator {
-                audio,
+                audio: audio.clone(),
                 profiles: profiles_map,
                 primary_backend: primary,
                 fallback_backend: fallback,
@@ -132,6 +140,10 @@ fn main() {
             commands::list_input_devices,
             commands::list_history,
             commands::delete_history,
+            commands::test_llm_provider,
+            commands::start_mic_preview,
+            commands::stop_mic_preview,
+            commands::get_audio_level,
         ])
         .plugin(tauri_plugin_shell::init())
         .run(tauri::generate_context!())

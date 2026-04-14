@@ -14,7 +14,12 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
             "open_settings" => {
                 if let Some(win) = app.get_webview_window("main") {
                     let _ = win.show();
+                    let _ = win.unminimize();
+                    // Windows steals focus aggressively; toggling always-on-top
+                    // forces the window to the foreground reliably.
+                    let _ = win.set_always_on_top(true);
                     let _ = win.set_focus();
+                    let _ = win.set_always_on_top(false);
                 }
             }
             "quit" => {

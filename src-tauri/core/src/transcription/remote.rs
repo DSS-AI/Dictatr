@@ -15,7 +15,6 @@ pub struct RemoteWhisperBackend {
 #[derive(Deserialize)]
 struct DictateResponse {
     text: String,
-    duration_ms: u64,
 }
 
 impl RemoteWhisperBackend {
@@ -47,7 +46,8 @@ impl TranscriptionBackend for RemoteWhisperBackend {
     }
 
     async fn is_available(&self) -> bool {
-        let url = format!("{}/api/health", self.base_url);
+        // Probe the models endpoint (every OpenAI-compatible server has it).
+        let url = format!("{}/v1/models", self.base_url);
         self.client
             .get(&url)
             .timeout(Duration::from_secs(2))
@@ -64,30 +64,43 @@ impl TranscriptionBackend for RemoteWhisperBackend {
         vocabulary: &[String],
     ) -> Result<Transcription> {
         let wav = pcm_to_wav_16k_mono(samples)?;
-        let vocab = vocabulary.join(", ");
+        let started = std::time::Instant::now();
 
         let part = Part::bytes(wav)
             .file_name("audio.wav")
             .mime_str("audio/wav")
             .map_err(|e| AppError::Transcription(e.to_string()))?;
-        let form = Form::new()
+        let mut form = Form::new()
             .part("file", part)
-            .text("language", Self::lang_code(&language).to_string())
-            .text("vocabulary", vocab);
+            .text("model", "whisper-1".to_string())
+            .text("response_format", "json".to_string());
+        // Only set language when the user picked a specific one; "auto" means
+        // let Whisper detect.
+        let lang = Self::lang_code(&language);
+        if lang != "auto" {
+            form = form.text("language", lang.to_string());
+        }
+        if !vocabulary.is_empty() {
+            form = form.text("prompt", vocabulary.join(", "));
+        }
 
-        let resp = self
+        let mut req = self
             .client
-            .post(format!("{}/api/dictate", self.base_url))
-            .bearer_auth(&self.bearer_token)
+            .post(format!("{}/v1/audio/transcriptions", self.base_url));
+        if !self.bearer_token.is_empty() {
+            req = req.bearer_auth(&self.bearer_token);
+        }
+        let resp = req
             .multipart(form)
             .send()
             .await
             .map_err(|e| AppError::Transcription(e.to_string()))?;
 
         if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
             return Err(AppError::Transcription(format!(
-                "server status {}",
-                resp.status()
+                "server status {status}: {body}"
             )));
         }
         let body: DictateResponse = resp
@@ -96,7 +109,7 @@ impl TranscriptionBackend for RemoteWhisperBackend {
             .map_err(|e| AppError::Transcription(e.to_string()))?;
         Ok(Transcription {
             text: body.text,
-            duration_ms: body.duration_ms,
+            duration_ms: started.elapsed().as_millis() as u64,
             backend_id: "remote-whisper",
         })
     }
