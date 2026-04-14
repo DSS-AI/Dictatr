@@ -40,7 +40,7 @@ impl Default for General {
 }
 
 pub fn config_path() -> Result<PathBuf> {
-    let dirs = ProjectDirs::from("de", "dss", "Whisper")
+    let dirs = ProjectDirs::from("de", "dss", "Dictatr")
         .ok_or_else(|| AppError::Config("could not resolve app dirs".into()))?;
     Ok(dirs.config_dir().join("config.json"))
 }

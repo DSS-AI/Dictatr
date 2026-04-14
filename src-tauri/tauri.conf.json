@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "DSS-Whisper",
+  "productName": "Dictatr",
   "version": "0.1.0",
-  "identifier": "de.dss.whisper",
+  "identifier": "de.dss.dictatr",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "DSS-Whisper Settings",
+        "title": "Dictatr Settings",
         "width": 900,
         "height": 650,
         "visible": false

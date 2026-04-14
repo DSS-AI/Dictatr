@@ -11,7 +11,7 @@ export default function App() {
     <BrowserRouter>
       <div className="app">
         <nav className="sidebar">
-          <h2>DSS-Whisper</h2>
+          <h2>Dictatr</h2>
           <NavLink to="/profiles">Profile</NavLink>
           <NavLink to="/providers">LLM-Anbieter</NavLink>
           <NavLink to="/vocabulary">Wörterbuch</NavLink>

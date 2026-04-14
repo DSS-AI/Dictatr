@@ -1,7 +1,7 @@
 use crate::error::{AppError, Result};
 use uuid::Uuid;
 
-const SERVICE: &str = "DSS-Whisper";
+const SERVICE: &str = "Dictatr";
 
 fn key_for(provider_id: Uuid) -> String {
     format!("provider-{}", provider_id)

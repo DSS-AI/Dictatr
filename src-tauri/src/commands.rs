@@ -1,7 +1,7 @@
-use dss_whisper_core::audio::capture::AudioCapture;
-use dss_whisper_core::config::{self, AppConfig};
-use dss_whisper_core::history::{HistoryEntry, HistoryStore};
-use dss_whisper_core::secrets;
+use dictatr_core::audio::capture::AudioCapture;
+use dictatr_core::config::{self, AppConfig};
+use dictatr_core::history::{HistoryEntry, HistoryStore};
+use dictatr_core::secrets;
 use std::sync::Arc;
 use tauri::State;
 use uuid::Uuid;

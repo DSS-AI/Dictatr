@@ -6,7 +6,7 @@ pub fn show(app: &AppHandle) -> tauri::Result<()> {
         return Ok(());
     }
     let _ = WebviewWindowBuilder::new(app, "overlay", WebviewUrl::App("overlay.html".into()))
-        .title("DSS-Whisper Overlay")
+        .title("Dictatr Overlay")
         .decorations(false)
         .always_on_top(true)
         .transparent(true)

@@ -1,4 +1,4 @@
-# DSS-Whisper — Windows Build & Test Guide
+# Dictatr — Windows Build & Test Guide
 
 Dieser Guide erklärt Schritt für Schritt, wie du den aktuellen Stand von `feat/phase1-mvp` auf einem Windows-Rechner baust, installierst und testest.
 
@@ -48,8 +48,8 @@ https://git-scm.com/download/win
 ## 2. Repo klonen und Branch auschecken
 
 ```powershell
-git clone <dein-git-remote> DSS-Whisper
-cd DSS-Whisper
+git clone <dein-git-remote> Dictatr
+cd Dictatr
 git checkout feat/phase1-mvp
 ```
 
@@ -57,8 +57,8 @@ Falls das Repo nur auf dem Synology/Debian-Host liegt, kopiere den Ordner per SM
 
 ```bash
 # Auf Debian (Server):
-cd /mnt/synology/Coding/DSS-Whisper
-git config --global --add safe.directory /mnt/synology/Coding/DSS-Whisper
+cd /mnt/synology/Coding/Dictatr
+git config --global --add safe.directory /mnt/synology/Coding/Dictatr
 # SMB-Freigabe nutzen ODER remote pushen.
 ```
 
@@ -67,7 +67,7 @@ git config --global --add safe.directory /mnt/synology/Coding/DSS-Whisper
 ## 3. Frontend-Dependencies installieren
 
 ```powershell
-cd DSS-Whisper
+cd Dictatr
 bun install
 ```
 
@@ -104,7 +104,7 @@ Fehlerfälle:
 bun run tauri build
 ```
 
-Output: `src-tauri\target\release\bundle\msi\DSS-Whisper_0.1.0_x64_en-US.msi`
+Output: `src-tauri\target\release\bundle\msi\Dictatr_0.1.0_x64_en-US.msi`
 
 Die MSI ist installierbar wie jede Standard-Windows-App.
 
@@ -116,7 +116,7 @@ Das Modell `ggml-base.bin` (~140 MB) muss manuell abgelegt werden:
 
 ```powershell
 # URL: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
-$dest = "$env:APPDATA\DSS-Whisper\models\ggml-base.bin"
+$dest = "$env:APPDATA\Dictatr\models\ggml-base.bin"
 New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
 Invoke-WebRequest `
   "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin" `
@@ -156,7 +156,7 @@ Nach dem Download muss der Pfad im Code aktuell auf `ggml-base.bin` zeigen (`src
 3. Reinsprechen.
 4. Loslassen → ca. 1–3 s Pause → Text erscheint an der Cursorposition.
 
-Wenn's nicht funktioniert: `%APPDATA%\DSS-Whisper\logs\` anschauen (Logs sind aktuell auf stdout — für Dev-Build im Terminal sichtbar).
+Wenn's nicht funktioniert: `%APPDATA%\Dictatr\logs\` anschauen (Logs sind aktuell auf stdout — für Dev-Build im Terminal sichtbar).
 
 ---
 

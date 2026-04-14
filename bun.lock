@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "dss-whisper",
+      "name": "dictatr",
       "dependencies": {
         "react": "^18.3.0",
         "react-dom": "^18.3.0",

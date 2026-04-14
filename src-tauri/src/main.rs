@@ -4,15 +4,15 @@ mod commands;
 mod overlay;
 mod tray;
 
-use dss_whisper_core::audio::controller::AudioController;
-use dss_whisper_core::config;
-use dss_whisper_core::history::HistoryStore;
-use dss_whisper_core::hotkey::{HotkeyEvent, HotkeyRegistry};
-use dss_whisper_core::llm::{anthropic::AnthropicProvider, openai_compat::OpenAiCompatProvider, LlmProvider};
-use dss_whisper_core::orchestrator::Orchestrator;
-use dss_whisper_core::secrets;
-use dss_whisper_core::state::AppState;
-use dss_whisper_core::transcription::{
+use dictatr_core::audio::controller::AudioController;
+use dictatr_core::config;
+use dictatr_core::history::HistoryStore;
+use dictatr_core::hotkey::{HotkeyEvent, HotkeyRegistry};
+use dictatr_core::llm::{anthropic::AnthropicProvider, openai_compat::OpenAiCompatProvider, LlmProvider};
+use dictatr_core::orchestrator::Orchestrator;
+use dictatr_core::secrets;
+use dictatr_core::state::AppState;
+use dictatr_core::transcription::{
     local::LocalWhisperBackend, remote::RemoteWhisperBackend, TranscriptionBackend,
 };
 use directories::ProjectDirs;
@@ -29,7 +29,7 @@ fn main() {
             let handle = app.handle().clone();
             tray::setup(&handle)?;
 
-            let dirs = ProjectDirs::from("de", "dss", "Whisper")
+            let dirs = ProjectDirs::from("de", "dss", "Dictatr")
                 .expect("could not resolve project dirs");
             let db_path = dirs.config_dir().join("history.db");
             let history = Arc::new(HistoryStore::open(&db_path)
@@ -38,9 +38,9 @@ fn main() {
 
             let cfg = config::load().unwrap_or_default();
 
-            let remote_url = std::env::var("DSS_WHISPER_REMOTE_URL")
+            let remote_url = std::env::var("DICTATR_REMOTE_URL")
                 .unwrap_or_else(|_| "http://192.168.178.43:8503".into());
-            let remote_token = std::env::var("DSS_WHISPER_REMOTE_TOKEN").unwrap_or_default();
+            let remote_token = std::env::var("DICTATR_REMOTE_TOKEN").unwrap_or_default();
 
             let primary: Arc<dyn TranscriptionBackend> = Arc::new(
                 RemoteWhisperBackend::new(remote_url, remote_token)
@@ -68,7 +68,7 @@ fn main() {
             for p in &cfg.providers {
                 if let Ok(key) = secrets::get_api_key(p.id) {
                     let prov: Arc<dyn LlmProvider> = match p.r#type {
-                        dss_whisper_core::config::provider::ProviderType::Anthropic =>
+                        dictatr_core::config::provider::ProviderType::Anthropic =>
                             Arc::new(AnthropicProvider::new(key)),
                         _ => Arc::new(OpenAiCompatProvider::new(p.base_url.clone(), key)),
                     };
