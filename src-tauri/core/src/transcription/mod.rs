@@ -1,3 +1,4 @@
+pub mod local;
 pub mod remote;
 
 use crate::config::profile::Language;

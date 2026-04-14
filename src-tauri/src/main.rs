@@ -12,7 +12,9 @@ use dss_whisper_core::llm::{anthropic::AnthropicProvider, openai_compat::OpenAiC
 use dss_whisper_core::orchestrator::Orchestrator;
 use dss_whisper_core::secrets;
 use dss_whisper_core::state::AppState;
-use dss_whisper_core::transcription::{remote::RemoteWhisperBackend, TranscriptionBackend};
+use dss_whisper_core::transcription::{
+    local::LocalWhisperBackend, remote::RemoteWhisperBackend, TranscriptionBackend,
+};
 use directories::ProjectDirs;
 use parking_lot::Mutex;
 use std::collections::HashMap;
@@ -44,9 +46,23 @@ fn main() {
                 RemoteWhisperBackend::new(remote_url, remote_token)
             );
 
-            // Fallback: for Phase 1 without whisper.cpp, reuse primary as fallback.
-            // Task 11 will replace this with LocalWhisperBackend.
-            let fallback: Arc<dyn TranscriptionBackend> = primary.clone();
+            // Fallback: use LocalWhisperBackend if model file is present, otherwise reuse primary.
+            let model_path = dirs.data_dir().join("models").join("ggml-base.bin");
+            let fallback: Arc<dyn TranscriptionBackend> = if model_path.exists() {
+                match LocalWhisperBackend::new(model_path.clone()) {
+                    Ok(be) => Arc::new(be),
+                    Err(e) => {
+                        eprintln!("local whisper init failed, falling back to remote: {e:?}");
+                        primary.clone()
+                    }
+                }
+            } else {
+                eprintln!(
+                    "local whisper model not found at {:?}, using remote only",
+                    model_path
+                );
+                primary.clone()
+            };
 
             let mut providers: HashMap<Uuid, Arc<dyn LlmProvider>> = HashMap::new();
             for p in &cfg.providers {
