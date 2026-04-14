@@ -42,6 +42,7 @@ export interface General {
   history_limit: number;
   mic_device: string | null;
   remote_whisper_url: string;
+  show_tooltips: boolean;
 }
 
 export interface AppConfig {

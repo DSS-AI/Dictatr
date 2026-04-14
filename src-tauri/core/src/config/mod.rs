@@ -20,6 +20,8 @@ fn default_remote_whisper_url() -> String {
     "http://192.168.178.43:8000".to_string()
 }
 
+fn default_true() -> bool { true }
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct General {
     pub autostart: bool,
@@ -30,6 +32,8 @@ pub struct General {
     pub mic_device: Option<String>,
     #[serde(default = "default_remote_whisper_url")]
     pub remote_whisper_url: String,
+    #[serde(default = "default_true")]
+    pub show_tooltips: bool,
 }
 
 impl Default for General {
@@ -42,6 +46,7 @@ impl Default for General {
             history_limit: 100,
             mic_device: None,
             remote_whisper_url: default_remote_whisper_url(),
+            show_tooltips: true,
         }
     }
 }

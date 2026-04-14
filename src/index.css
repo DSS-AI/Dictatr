@@ -36,27 +36,28 @@ body {
 
 /* --- Sidebar ------------------------------------------------------------- */
 .sidebar {
-  width: 220px;
+  width: 150px;
   background: #151521;
-  padding: 20px 14px;
+  padding: 16px 10px;
   border-right: 1px solid var(--border);
 }
 .sidebar h2 {
-  margin: 0 0 22px;
-  padding: 0 8px;
-  font-size: 16px;
+  margin: 0 0 18px;
+  padding: 0 6px;
+  font-size: 15px;
   font-weight: 700;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.3px;
   color: var(--text);
 }
 .sidebar a {
   display: block;
-  padding: 10px 14px;
+  padding: 8px 10px;
   color: var(--text-dim);
   text-decoration: none;
-  border-radius: 6px;
+  border-radius: 5px;
   margin-bottom: 2px;
   font-weight: 500;
+  font-size: 13px;
   border-left: 3px solid transparent;
   transition: background 120ms, color 120ms;
 }
@@ -87,11 +88,11 @@ fieldset {
   border: 1px solid var(--field-border);
   background: var(--bg-elevated);
   border-radius: 10px;
-  margin: 16px 0 12px;
-  padding: 12px 18px;
+  margin: 14px 0 10px;
+  padding: 10px 16px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
-fieldset + fieldset { margin-top: 8px; }
+fieldset + fieldset { margin-top: 6px; }
 legend {
   padding: 4px 12px;
   margin-left: 4px;
@@ -106,7 +107,7 @@ legend {
 /* --- Labels + inputs ----------------------------------------------------- */
 label {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   color: #b8b8c8;
   font-size: 12px;
   font-weight: 500;

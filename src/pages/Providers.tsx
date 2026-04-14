@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ipc } from "../ipc";
 import type { AppConfig, LlmProviderConfig, ProviderType } from "../types";
+import InfoTip from "../components/InfoTip";
 
 type TestState = { status: "idle" | "running" | "ok" | "error"; message?: string };
 
@@ -21,6 +22,7 @@ export default function Providers() {
   useEffect(() => { ipc.getConfig().then(setCfg).catch(console.error); }, []);
 
   if (!cfg) return <div>Lade…</div>;
+  const showTips = cfg.general.show_tooltips !== false;
 
   const save = (next: AppConfig) => { setCfg(next); ipc.saveConfig(next); };
 
@@ -95,7 +97,7 @@ export default function Providers() {
           <fieldset key={p.id}>
             <legend>{p.name}</legend>
             <label>Name<input value={p.name} onChange={e => update(i, { name: e.target.value })} /></label>
-            <label>Typ
+            <label>Typ<InfoTip enabled={showTips} text="API-Protokoll des Anbieters. OpenAI-kompatibel (Groq/LiteLLM/Ollama/OpenRouter) nutzt /v1/chat/completions mit Bearer-Auth. Anthropic hat eine eigene API-Form." />
               <select value={p.type} onChange={e => changeType(i, e.target.value as ProviderType)}>
                 <option value="openai">OpenAI</option>
                 <option value="open_router">OpenRouter</option>
@@ -104,10 +106,14 @@ export default function Providers() {
                 <option value="openai_compatible">OpenAI-kompatibel (Groq, LiteLLM, Custom)</option>
               </select>
             </label>
-            <label>Base-URL<input value={p.base_url} onChange={e => update(i, { base_url: e.target.value })} /></label>
-            <label>Default-Modell<input value={p.default_model} onChange={e => update(i, { default_model: e.target.value })} /></label>
+            <label>Base-URL<InfoTip enabled={showTips} text="Root-URL der API, ohne Pfad. Dictatr hängt /v1/chat/completions und /v1/audio/transcriptions selbst an. Beispiel: https://openrouter.ai/api oder http://localhost:11434 für Ollama." />
+              <input value={p.base_url} onChange={e => update(i, { base_url: e.target.value })} />
+            </label>
+            <label>Default-Modell<InfoTip enabled={showTips} text="Standard-Modell wenn im Profil kein anderes angegeben ist. Bei OpenRouter im Format vendor/model (z. B. google/gemini-2.5-flash)." />
+              <input value={p.default_model} onChange={e => update(i, { default_model: e.target.value })} />
+            </label>
             {preset?.model_hint && <small style={{ color: "#888" }}>{preset.model_hint}</small>}
-            <label>API-Key (wird im OS-Keyring gespeichert, nicht in config.json)
+            <label>API-Key<InfoTip enabled={showTips} text="Wird im OS-Keyring gespeichert (Windows Credential Manager bzw. macOS Keychain), NICHT in der config.json. Kannst du gefahrlos ins Repo syncen." />
               <input type="password" value={apiKeyInputs[p.id] ?? ""}
                 onChange={e => setApiKeyInputs({ ...apiKeyInputs, [p.id]: e.target.value })} />
             </label>
