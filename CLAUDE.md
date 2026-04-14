@@ -1,47 +1,63 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance für Claude Code in diesem Repo.
 
 ## Project Overview
 
-Projekt-Template-Starterkit für neue Claude Code Projekte. Enthält vorkonfigurierte Commands, Context-Dateien, Skills und Plugin-Integrationen. Dient als Ausgangspunkt für jedes neue Projekt. Bei Projektstart Abschnitte anpassen und Platzhalter ersetzen.
+**Dictatr** — leichtgewichtige Desktop-Diktier-App für Windows (später macOS). Self-hosted Alternative zu [wisprflow.ai](https://www.wisprflow.ai).
+
+Läuft im Hintergrund, wird per globalem Hotkey aktiviert, transkribiert Sprache (Whisper) und fügt den Text an der aktuellen Cursor-Position ein. Multi-LLM-Post-Processing für Korrektur und Umformulierung. User wählt den LLM-Provider frei.
+
+GitHub: https://github.com/DSS-AI/Dictatr
 
 ---
 
 ## Tech Stack
 
 | Technology | Purpose |
-|------------|---------|
-| Bun | JavaScript-Runtime, benötigt für Claude Code Plugins (z.B. Telegram) |
-| Claude Code Plugins | Erweiterungen für Claude Code (Telegram, Playwright, etc.) |
-| Python >= 3.11 + uv | Runtime und Paketmanager für browser-use |
-| browser-use | KI-gesteuerte Browser-Automatisierung via Chrome DevTools Protocol (Standard-Tool) |
+|---|---|
+| Rust 1.80+ | Backend-Core (Audio, Hotkey, Transcription, State-Machine) |
+| Tauri 2.x | Desktop-App-Framework, cross-platform Win+Mac |
+| React 18 + TypeScript | Settings-UI im Tauri-Webview |
+| Bun | JS-Runtime + Paketmanager |
+| Vite 5 | Build-Tool für Frontend |
+| cpal | Audio-Capture cross-platform |
+| whisper-rs | Lokales Whisper (whisper.cpp via FFI) |
+| enigo | Keystroke-Simulation (Text-Injection) |
+| global-hotkey | Globale Hotkey-Registrierung |
+| rusqlite | Lokale History-DB |
+| keyring | OS-Keyring (Credential Manager / Keychain) |
+
+---
+
+## Workspace-Architektur
+
+Cargo-Workspace mit zwei Crates:
+
+- **`dictatr-core`** (`src-tauri/core/`) — reine Logik, keine Tauri-Deps. Alle Module testbar ohne GUI-Stack. Enthält: audio, config, error, history, hotkey, inject, llm, orchestrator, secrets, state, transcription.
+- **`dictatr`** (`src-tauri/`) — Tauri-Binary mit IPC-Commands, Tray, Overlay, main.rs-Verdrahtung.
+
+Frontend-Code liegt in `src/` (React + TS).
 
 ---
 
 ## Commands
 
 ```bash
-# Bun installieren (falls nicht vorhanden)
-curl -fsSL https://bun.sh/install | bash
+# Frontend-Deps installieren
+bun install
 
-# Python + uv installieren (falls nicht vorhanden)
-curl -LsSf https://astral.sh/uv/install.sh | sh
+# Dev-Build (Hot-Reload)
+bun run tauri dev
 
-# browser-use installieren
-uv add browser-use && uv sync
+# Release-Build (MSI auf Windows)
+bun run tauri build
 
-# Chromium für browser-use installieren
-uvx browser-use install
+# Core-Tests (Linux: läuft ohne whisper-rs)
+cd src-tauri && cargo test -p dictatr-core
 
-# Installation prüfen
-browser-use doctor
-
-# Telegram Plugin installieren
-/plugin install telegram@claude-plugins-official
-
-# Telegram Plugin konfigurieren (Bot-Token via /telegram:configure)
-# Zugriff verwalten via /telegram:access
+# TypeScript-Check
+bunx tsc --noEmit
 ```
 
 ---
@@ -49,138 +65,126 @@ browser-use doctor
 ## Project Structure
 
 ```
-AA_ProjektTemplateStart/
-├── .claude/
-│   ├── commands/       # Slash-Commands (prime, shutdown, create-plan, implement, etc.)
-│   ├── context/        # Kontext-Dateien (business, personal, strategy, data)
-│   └── skills/         # Skills (browser-use, agent-browser, e2e-test, frontend-design, skill-creator)
-├── outputs/            # Generierte Ausgaben
-├── plans/              # Implementierungspläne
-├── reference/          # Referenzmaterial
-├── scripts/            # Automatisierungsskripte
-├── pyproject.toml      # Python-Dependencies (browser-use)
-└── CLAUDE.md           # Projekt-Regeln und -Konfiguration
+Dictatr/
+├── .claude/                          # Projekt-lokale Commands/Skills (mostly global now)
+├── CLAUDE.md                         # Diese Datei
+├── package.json                      # Frontend-Deps + Tauri-Skripte
+├── tsconfig*.json, vite.config.ts    # TS- und Vite-Konfig
+├── index.html, public/               # Frontend-Entry, statische Assets
+├── src/                              # React-App
+│   ├── App.tsx, main.tsx, index.css
+│   ├── ipc.ts, types.ts              # Tauri-IPC-Wrapper
+│   ├── components/                   # HotkeyRecorder, LevelMeter
+│   └── pages/                        # Profiles, Providers, Vocabulary, Audio, General, History
+├── src-tauri/                        # Rust-Workspace-Root + Tauri-Binary
+│   ├── Cargo.toml                    # Workspace + dictatr-binary-Manifest
+│   ├── tauri.conf.json               # Tauri-App-Konfig
+│   ├── icons/                        # App-Icons (icon.ico, tray-*.png)
+│   ├── src/                          # Tauri-Binary (main.rs, commands.rs, tray.rs, overlay.rs)
+│   └── core/                         # dictatr-core Crate (reine Logik, testbar)
+│       ├── Cargo.toml
+│       └── src/
+│           ├── lib.rs
+│           ├── audio/                # capture, controller, ringbuffer
+│           ├── config/               # profile, provider, general
+│           ├── error.rs, state.rs, secrets.rs, hotkey.rs, inject.rs
+│           ├── history/              # SQLite-Store
+│           ├── llm/                  # openai_compat, anthropic, prompt
+│           └── transcription/        # remote (GPU-Server), local (whisper.cpp)
+└── docs/
+    ├── BUILD-WINDOWS.md              # Schritt-für-Schritt Windows-Build-Guide
+    └── superpowers/                  # Design-Spec + Phase-1-Implementation-Plan
+        ├── specs/2026-04-13-dss-whisper-dictation-design.md
+        └── plans/2026-04-13-dss-whisper-phase1-mvp.md
 ```
 
 ---
 
-## Architecture
+## Architektur-Überblick
 
-Dieses Projekt ist ein Template — es hat keine eigene Architektur. Bei Projektstart diesen Abschnitt mit der Architektur des neuen Projekts ersetzen.
+```
+Global-Hotkey → AudioCapture (16 kHz mono, Ringbuffer)
+             → State-Machine (Idle/Recording/Transcribing/Injecting)
+             → TranscriptionBackend (remote GPU-Server ODER lokales whisper.cpp)
+             → [optional] LLM-Post-Processing (openai-compat / anthropic / ollama)
+             → Text-Injection via enigo (Clipboard-Fallback)
+             → History (SQLite) + Tray-Icon-Update
+```
+
+Profile binden Hotkey + Backend + Sprache + Post-Processing-Einstellungen zusammen. Mehrere Profile parallel (z.B. „schnell", „E-Mail formal", „Englisch").
 
 ---
 
-## Code Patterns
+## Konfiguration & Datenpfade (Windows)
 
-Bei Projektstart mit den Patterns des neuen Projekts ersetzen.
+| Pfad | Inhalt |
+|---|---|
+| `%APPDATA%/Dictatr/config.json` | Profile, LLM-Provider-Metadaten, UI-Einstellungen |
+| `%APPDATA%/Dictatr/vocabulary.txt` | Eigene Begriffe (eine Zeile pro Eintrag) |
+| `%APPDATA%/Dictatr/history.db` | SQLite-History |
+| `%APPDATA%/Dictatr/models/ggml-base.bin` | Lokales Whisper-Modell (~140 MB, separat runterladen) |
+| Windows Credential Manager | API-Keys (Service „Dictatr") |
+
+macOS-Äquivalent: `~/Library/Application Support/Dictatr/`.
 
 ---
 
 ## Testing
 
-Bei Projektstart mit den Test-Commands des neuen Projekts ersetzen.
+```bash
+# Rust-Unit-Tests (dictatr-core)
+cd src-tauri && cargo test -p dictatr-core
+
+# TypeScript-Typecheck
+bunx tsc --noEmit
+```
+
+Stand Phase 1 MVP: **24 Rust-Unit-Tests grün** (Ringbuffer, Resample, State-Machine, Hotkey-Parsing, Config-Serde, Profile-Validation, History, Prompt-Builder, wiremock für RemoteWhisper + OpenAI-compat). TS-Check 0 Fehler.
+
+---
+
+## Phasen-Stand
+
+### Phase 1 MVP — ✅ abgeschlossen (Branch `feat/phase1-mvp`)
+
+- Tauri-Skeleton, Settings-UI mit 6 Tabs, Tray-Icon, Overlay
+- Audio-Capture + globale Hotkeys (push-to-talk + toggle)
+- TranscriptionBackend-Trait + RemoteWhisperBackend (HTTP) + LocalWhisperBackend (whisper.cpp)
+- LlmProvider-Trait + OpenAI-compat + Anthropic-Adapter + Prompt-Builder
+- Orchestrator mit Auto-Fallback (Remote offline → Local)
+- SQLite-History, OS-Keyring für API-Keys
+- Text-Injection via enigo mit Clipboard-Fallback
+
+### Deferred auf Phase 2 / externen Host
+
+- **Server-Endpoint `/api/dictate`** in DSS-V-A-Transcribe (nur mit User-Freigabe; Projekt darf nicht ohne Weisung verändert werden)
+- **MSI-Installer** (nur auf Windows-Host baubar)
+- **macOS-Port** (Accessibility-Permissions, Notarization)
+- **Auto-Updater** (Tauri-Updater)
+- **Kontext-aware Prompts** + Command-Mode
 
 ---
 
 ## Key Files
 
 | File | Purpose |
-|------|---------|
-| `CLAUDE.md` | Projekt-Regeln, Tech Stack, Plugin-Doku |
-| `pyproject.toml` | Python-Dependencies (browser-use) |
-| `.gitignore` | Ignoriert Synology @eaDir, OS-Dateien, Python-Cache, .venv, .env |
-| `.claude/commands/prime.md` | Session-Start: Workspace verstehen inkl. Plugin-Status |
-| `.claude/commands/shutdown.md` | Session-Ende: Aufräumen, Committen, Zusammenfassung |
-| `.claude/context/` | Kontext-Dateien (Business, Personal, Strategie, Daten) |
-| `.claude/skills/browser-use/` | browser-use Skill: CLI-Referenz für Browser-Automatisierung |
-
----
-
-## Verfügbare Slash-Commands
-
-| Command | Zweck |
-|---------|-------|
-| `/prime` | Session-Start: Workspace verstehen |
-| `/shutdown` | Session-Ende: Aufräumen, Committen |
-| `/create-plan` | Implementierungsplan erstellen |
-| `/implement` | Plan implementieren |
-| `/execute` | Plan ausführen |
-| `/plan-feature` | Feature-Plan mit Codebase-Analyse |
-| `/create-prd` | Product Requirements Document erstellen |
-| `/commit` | Atomare Commits mit Tags |
-| `/init-project` | Projekt lokal initialisieren |
-| `/create-rules` | Globale Regeln aus Codebase erstellen |
-| `/review` | Systematisches Code-Review |
-| `/debug` | Systematisches Debugging |
-| `/refactor` | Geführtes Refactoring |
-
----
-
-## Verfügbare Skills
-
-| Skill | Zweck |
-|-------|-------|
-| `browser-use` | KI-gesteuerte Browser-Automatisierung via CLI (Standard-Tool) |
-| `agent-browser` | Browser-Interaktionen für Tests und Datenextraktion |
-| `e2e-test` | End-to-End-Tests |
-| `frontend-design` | Frontend-Design und UI-Komponenten |
-| `skill-creator` | Neue Skills erstellen und verwalten |
-
----
-
-## Plugins & Abhängigkeiten
-
-### Voraussetzungen
-
-| Abhängigkeit | Installation | Zweck |
-|---|---|---|
-| Bun | `curl -fsSL https://bun.sh/install \| bash` | Runtime für Claude Code Plugins |
-| Python >= 3.11 | System-Python oder pyenv | Runtime für browser-use |
-| uv | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | Python-Paketmanager |
-
-### Installierte Plugins
-
-| Plugin | Installationsbefehl | Zweck |
-|---|---|---|
-| Telegram | `/plugin install telegram@claude-plugins-official` | Telegram-Bot-Integration |
-| Playwright | (vorinstalliert) | E2E-Tests |
-
-### browser-use (Standard-Tool für Browser-Automatisierung)
-
-browser-use ist das Standard-Tool für KI-gesteuerte Browser-Automatisierung in allen Projekten. Es nutzt das Chrome DevTools Protocol (CDP) und ermöglicht einem LLM-Agenten, einen echten Browser zu steuern. Vollständige CLI-Referenz im Skill: `.claude/skills/browser-use/SKILL.md`
-
-**Installation:**
-```bash
-uv add browser-use && uv sync
-uvx browser-use install   # Chromium installieren
-browser-use doctor        # Prüfen
-```
-
-**CLI-Kurzreferenz (Aliase: `browser-use`, `bu`, `browseruse`, `browser`):**
-```bash
-browser-use open https://example.com    # URL öffnen
-browser-use state                       # Klickbare Elemente anzeigen
-browser-use click 5                     # Element per Index klicken
-browser-use type "Hello"                # Text eingeben
-browser-use screenshot page.png         # Screenshot
-browser-use close                       # Browser schließen
-```
-
-**Konfiguration:** LLM-API-Keys in `.env` setzen (z.B. `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`).
-
-### Telegram Plugin Setup
-
-1. **Bun** muss installiert sein (siehe oben)
-2. Plugin installieren: `/plugin install telegram@claude-plugins-official`
-3. Bot-Token konfigurieren: `/telegram:configure` (Telegram Bot-Token von @BotFather benötigt)
-4. Zugriff verwalten: `/telegram:access`
+|---|---|
+| `src-tauri/src/main.rs` | Tauri-Setup, verdrahtet Orchestrator + Audio + Hotkey + Tray |
+| `src-tauri/src/commands.rs` | IPC-Commands (Config-CRUD, History, API-Keys) |
+| `src-tauri/core/src/orchestrator.rs` | Kern-Event-Loop: Hotkey → Audio → Transcribe → LLM → Inject |
+| `src-tauri/core/src/audio/controller.rs` | Send-sicherer Wrapper um AudioCapture |
+| `src-tauri/core/src/transcription/{remote,local}.rs` | Backend-Implementierungen |
+| `src-tauri/core/src/llm/{openai_compat,anthropic}.rs` | LLM-Provider-Adapter |
+| `src/pages/Profiles.tsx` | Zentrale Settings-UI für Dictation-Profile |
+| `docs/BUILD-WINDOWS.md` | Windows-Build-Guide für neue Umgebungen |
+| `docs/superpowers/specs/2026-04-13-*-design.md` | Design-Dokument (historisch unter DSS-Whisper) |
+| `docs/superpowers/plans/2026-04-13-*-phase1-mvp.md` | Implementation-Plan mit 20 Tasks |
 
 ---
 
 ## Notes
 
-- Dies ist ein **Template-Starterkit** — Platzhalter-Abschnitte (Architecture, Code Patterns, Testing) bei Projektstart ersetzen
-- **browser-use** ist das Standard-Tool für Browser-Automatisierung (ersetzt direkte Playwright-Nutzung für KI-gesteuerte Aufgaben). Für einfache E2E-Tests bleibt Playwright verfügbar
-- browser-use benötigt Python >= 3.11 und Chromium — bei Projektstart `uvx browser-use install` ausführen
-- Bun ist Voraussetzung für Plugin-Installationen — vor dem ersten Plugin-Install `bun --version` prüfen
-- Telegram-Plugin benötigt einen Bot-Token von Telegram @BotFather
+- **Branch-Strategie:** `master` enthält den initialen Template-Stand + Design-Docs. `feat/phase1-mvp` ist der aktuelle Arbeitszweig. PR/Merge nach Windows-Build-Verifikation.
+- **Build-Abhängigkeiten auf Linux:** cpal braucht `libasound2-dev`, enigo braucht `libxdo-dev`, whisper-rs braucht `cmake` + `clang` + `libclang-dev` (nicht alle auf diesem Debian-Host installiert — Builds auf Windows-Host verschieben, wo MSVC alles mitbringt).
+- **Vom NAS-Mount bauen ist verboten:** Build-Artefakte gehören nicht auf die NAS (Locking + Performance). Unter Windows lokal nach `C:\Dev\Dictatr\` klonen.
+- **DSS-V-A-Transcribe bleibt unangetastet:** Das Remote-Whisper-Backend spricht gegen den bestehenden Port 8503, ein neuer `/api/dictate`-Endpoint wird nur mit ausdrücklicher Freigabe implementiert.
