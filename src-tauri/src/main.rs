@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod models;
 mod overlay;
 mod tray;
 
@@ -22,6 +23,24 @@ use std::sync::Arc;
 use tauri::Manager;
 use tokio::sync::mpsc;
 use uuid::Uuid;
+
+/// Return the path of the first installed ggml-*.bin under the models dir,
+/// preferring the largest file (so large-v3 wins over base if both exist).
+fn first_installed_model(dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    let mut best: Option<(u64, std::path::PathBuf)> = None;
+    let entries = std::fs::read_dir(dir).ok()?;
+    for entry in entries.flatten() {
+        let p = entry.path();
+        let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if name.starts_with("ggml-") && name.ends_with(".bin") {
+            let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+            if best.as_ref().map_or(true, |(s, _)| size > *s) {
+                best = Some((size, p));
+            }
+        }
+    }
+    best.map(|(_, p)| p)
+}
 
 fn main() {
     tauri::Builder::default()
@@ -52,26 +71,28 @@ fn main() {
                 .unwrap_or_else(|_| "http://192.168.178.43:8000".into());
             let remote_token = std::env::var("DICTATR_REMOTE_TOKEN").unwrap_or_default();
 
-            let primary: Arc<dyn TranscriptionBackend> = Arc::new(
+            let remote_backend: Arc<dyn TranscriptionBackend> = Arc::new(
                 RemoteWhisperBackend::new(remote_url, remote_token)
             );
 
-            // Fallback: use LocalWhisperBackend if model file is present, otherwise reuse primary.
-            let model_path = dirs.data_dir().join("models").join("ggml-base.bin");
-            let fallback: Arc<dyn TranscriptionBackend> = if model_path.exists() {
-                match LocalWhisperBackend::new(model_path.clone()) {
-                    Ok(be) => Arc::new(be),
-                    Err(e) => {
-                        eprintln!("local whisper init failed, falling back to remote: {e:?}");
-                        primary.clone()
+            // Pick the first installed ggml-*.bin as the local model, if any.
+            let models_dir = dirs.data_dir().join("models");
+            let local_model = first_installed_model(&models_dir);
+            let local_backend: Option<Arc<dyn TranscriptionBackend>> = match local_model {
+                Some(path) => match LocalWhisperBackend::new(path.clone()) {
+                    Ok(be) => {
+                        eprintln!("loaded local whisper model: {:?}", path);
+                        Some(Arc::new(be))
                     }
+                    Err(e) => {
+                        eprintln!("local whisper init failed: {e:?}");
+                        None
+                    }
+                },
+                None => {
+                    eprintln!("no local whisper model installed under {:?}", models_dir);
+                    None
                 }
-            } else {
-                eprintln!(
-                    "local whisper model not found at {:?}, using remote only",
-                    model_path
-                );
-                primary.clone()
             };
 
             let mut providers: HashMap<Uuid, Arc<dyn LlmProvider>> = HashMap::new();
@@ -101,14 +122,25 @@ fn main() {
 
             let (tx, rx) = mpsc::unbounded_channel::<HotkeyEvent>();
             let id_map = registry.id_map();
+            let ll_keys = registry.ll_keys();
             // GlobalHotKeyManager is !Send (holds an HWND). Keep it alive on the
             // main thread by leaking it; the pump thread only needs the id map,
             // since GlobalHotKeyEvent::receiver() is a global channel.
             let _registry: &'static HotkeyRegistry = Box::leak(Box::new(registry));
-            std::thread::spawn(move || HotkeyRegistry::pump(id_map, tx));
+            let tx_pump = tx.clone();
+            std::thread::spawn(move || HotkeyRegistry::pump(id_map, tx_pump));
+
+            if !ll_keys.is_empty() {
+                match dictatr_core::hotkey_ll::start(ll_keys, tx.clone()) {
+                    Ok(hook) => { Box::leak(Box::new(hook)); }
+                    Err(e) => eprintln!("low-level hotkey hook failed: {e:?}"),
+                }
+            }
+            drop(tx);
 
             let audio = Arc::new(AudioController::spawn(cfg.general.max_recording_seconds));
             app.manage(audio.clone());
+            app.manage(Arc::new(models::DownloadState::new()));
 
             let state = Arc::new(Mutex::new(AppState::Idle));
             let vocabulary = std::fs::read_to_string(dirs.config_dir().join("vocabulary.txt"))
@@ -120,14 +152,15 @@ fn main() {
             let mut orch = Orchestrator {
                 audio: audio.clone(),
                 profiles: profiles_map,
-                primary_backend: primary,
-                fallback_backend: fallback,
+                remote_backend,
+                local_backend,
                 llm_providers: providers,
                 vocabulary,
                 history: history.clone(),
                 state,
                 toggle_active_profile: Arc::new(Mutex::new(None)),
                 mic_device,
+                sounds_enabled: cfg.general.sounds,
             };
             tauri::async_runtime::spawn(async move { orch.run_loop(rx).await; });
 
@@ -144,6 +177,11 @@ fn main() {
             commands::start_mic_preview,
             commands::stop_mic_preview,
             commands::get_audio_level,
+            models::get_models_dir,
+            models::list_models,
+            models::start_model_download,
+            models::get_download_progress,
+            models::delete_model,
         ])
         .plugin(tauri_plugin_shell::init())
         .run(tauri::generate_context!())

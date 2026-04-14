@@ -22,6 +22,8 @@ tokio = { version = "1", features = ["full"] }
 parking_lot = "0.12"
 uuid = { version = "1", features = ["v4", "serde"] }
 directories = "5"
+reqwest = { version = "0.12", features = ["stream", "rustls-tls"] }
+futures-util = "0.3"
 
 [features]
 default = ["custom-protocol"]

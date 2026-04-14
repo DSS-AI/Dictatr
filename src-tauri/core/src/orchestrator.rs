@@ -1,5 +1,5 @@
 use crate::audio::controller::AudioController;
-use crate::config::profile::{HotkeyMode, Profile};
+use crate::config::profile::{HotkeyMode, Profile, TranscriptionBackendId};
 use crate::error::{AppError, Result};
 use crate::history::{HistoryEntry, HistoryStore};
 use crate::hotkey::HotkeyEvent;
@@ -31,10 +31,10 @@ pub struct Orchestrator {
     pub audio: Arc<AudioController>,
     /// All configured profiles, keyed by their UUID.
     pub profiles: HashMap<Uuid, Profile>,
-    /// Preferred transcription backend (e.g. remote Whisper).
-    pub primary_backend: Arc<dyn TranscriptionBackend>,
-    /// Fallback backend used when the primary is unavailable.
-    pub fallback_backend: Arc<dyn TranscriptionBackend>,
+    /// Remote Whisper (server) backend — always available.
+    pub remote_backend: Arc<dyn TranscriptionBackend>,
+    /// Local whisper.cpp backend — present only if a model file was found.
+    pub local_backend: Option<Arc<dyn TranscriptionBackend>>,
     /// Available LLM providers for post-processing, keyed by their UUID.
     pub llm_providers: HashMap<Uuid, Arc<dyn LlmProvider>>,
     /// Shared vocabulary injected into transcription hints and LLM prompts.
@@ -47,6 +47,8 @@ pub struct Orchestrator {
     pub toggle_active_profile: Arc<Mutex<Option<Uuid>>>,
     /// Override microphone device name (`None` = OS default).
     pub mic_device: Option<String>,
+    /// Play audio cues on record start/stop when enabled.
+    pub sounds_enabled: bool,
 }
 
 impl Orchestrator {
@@ -116,6 +118,9 @@ impl Orchestrator {
     }
 
     async fn start_recording(&mut self, _profile: &Profile) -> Result<()> {
+        if self.sounds_enabled {
+            crate::sound::play_start();
+        }
         self.audio
             .start_recording(self.mic_device.clone())
             .await?;
@@ -125,6 +130,9 @@ impl Orchestrator {
     }
 
     async fn stop_and_process(&mut self, profile: &Profile) -> Result<()> {
+        if self.sounds_enabled {
+            crate::sound::play_stop();
+        }
         let samples = self.audio.stop_and_drain().await?;
         {
             let mut s = self.state.lock();
@@ -137,7 +145,7 @@ impl Orchestrator {
         }
 
         // --- Transcribe ---------------------------------------------------------
-        let backend = self.select_backend().await;
+        let backend = self.backend_for(profile)?;
         let transcription = backend
             .transcribe(&samples, profile.language.clone(), &self.vocabulary)
             .await?;
@@ -196,13 +204,17 @@ impl Orchestrator {
         Ok(())
     }
 
-    /// Return the primary backend when available, otherwise the fallback.
-    async fn select_backend(&self) -> Arc<dyn TranscriptionBackend> {
-        if self.primary_backend.is_available().await {
-            self.primary_backend.clone()
-        } else {
-            eprintln!("primary backend unavailable, using fallback");
-            self.fallback_backend.clone()
+    /// Pick the backend the profile asked for. `LocalWhisper` errors out
+    /// with an actionable message when no model is installed; `RemoteWhisper`
+    /// always returns the remote (availability is the caller's concern).
+    fn backend_for(&self, profile: &Profile) -> Result<Arc<dyn TranscriptionBackend>> {
+        match profile.transcription_backend {
+            TranscriptionBackendId::RemoteWhisper => Ok(self.remote_backend.clone()),
+            TranscriptionBackendId::LocalWhisper => self.local_backend.clone().ok_or_else(|| {
+                AppError::Transcription(
+                    "Lokales Whisper-Modell nicht installiert — bitte unter \"Modelle\" herunterladen oder Remote-Backend wählen".into(),
+                )
+            }),
         }
     }
 }

@@ -15,21 +15,36 @@ pub enum HotkeyEvent {
 pub struct HotkeyRegistry {
     manager: GlobalHotKeyManager,
     by_id: HashMap<u32, Uuid>,
+    /// Multimedia / launch keys registered via the low-level hook
+    /// (vk-code → profile id). Populated by `register()` when the combo
+    /// is a known multimedia key name.
+    ll_keys: HashMap<u32, Uuid>,
 }
 
 impl HotkeyRegistry {
     pub fn new() -> Result<Self> {
         let manager = GlobalHotKeyManager::new()
             .map_err(|e| AppError::Config(format!("hotkey manager init failed: {e}")))?;
-        Ok(Self { manager, by_id: HashMap::new() })
+        Ok(Self { manager, by_id: HashMap::new(), ll_keys: HashMap::new() })
     }
 
     pub fn register(&mut self, profile_id: Uuid, combo: &str) -> Result<()> {
+        // Multimedia / launch keys go through the low-level hook, which is
+        // the only reliable way to intercept them on Windows.
+        if let Some(vk) = crate::hotkey_ll::parse_vk(combo) {
+            self.ll_keys.insert(vk, profile_id);
+            return Ok(());
+        }
         let hk = HotKey::from_str(combo)
             .map_err(|e| AppError::Config(format!("invalid hotkey {combo}: {e}")))?;
         self.manager.register(hk).map_err(|e| AppError::Config(e.to_string()))?;
         self.by_id.insert(hk.id(), profile_id);
         Ok(())
+    }
+
+    /// Multimedia-key vk-code → profile id map for `hotkey_ll::start`.
+    pub fn ll_keys(&self) -> HashMap<u32, Uuid> {
+        self.ll_keys.clone()
     }
 
     pub fn clear(&mut self) {

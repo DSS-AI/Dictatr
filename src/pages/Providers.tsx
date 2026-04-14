@@ -75,7 +75,10 @@ export default function Providers() {
 
   return (
     <div>
-      <h1>LLM-Anbieter</h1>
+      <h1>LLM-Anbieter (Post-Processing)</h1>
+      <p style={{ color: "#888", marginTop: -8 }}>
+        Pro Profil aktivierbar im Reiter „Profile" → „Post-Processing aktiv".
+      </p>
       <button onClick={add}>+ Neuer Provider</button>
       {cfg.providers.map((p, i) => {
         const preset = PROVIDER_PRESETS[p.type];

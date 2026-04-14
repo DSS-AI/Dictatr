@@ -21,6 +21,14 @@ reqwest = { version = "0.12", features = ["multipart", "json"] }
 async-trait = "0.1"
 bytes = "1"
 hound = "3"
+rodio = "0.19"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 chrono = { version = "0.4", features = ["serde"] }
 whisper-rs = { version = "0.12", default-features = false }

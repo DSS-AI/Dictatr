@@ -15,4 +15,25 @@ export const ipc = {
     invoke<void>("start_mic_preview", { device }),
   stopMicPreview: () => invoke<void>("stop_mic_preview"),
   getAudioLevel: () => invoke<number>("get_audio_level"),
+  getModelsDir: () => invoke<string>("get_models_dir"),
+  listModels: () => invoke<ModelInfo[]>("list_models"),
+  startModelDownload: (name: string) => invoke<void>("start_model_download", { name }),
+  getDownloadProgress: () => invoke<DownloadProgress>("get_download_progress"),
+  deleteModel: (name: string) => invoke<void>("delete_model", { name }),
 };
+
+export interface ModelInfo {
+  name: string;
+  filename: string;
+  size_mb: number;
+  installed: boolean;
+  installed_bytes: number;
+}
+
+export interface DownloadProgress {
+  name: string | null;
+  downloaded: number;
+  total: number;
+  done: boolean;
+  error: string | null;
+}
