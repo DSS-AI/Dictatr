@@ -54,13 +54,12 @@ impl TranscriptionBackend for LocalWhisperBackend {
                 let mut state = ctx
                     .create_state()
                     .map_err(|e| AppError::Transcription(e.to_string()))?;
-                // BeamSearch ist robuster gegen Repeat-Loops als Greedy,
-                // besonders bei kurzen Utterances (<2s), wo das small-Modell
-                // auf CPU gerne in Wiederholungen verfällt.
-                let mut params = FullParams::new(SamplingStrategy::BeamSearch {
-                    beam_size: 5,
-                    patience: -1.0,
-                });
+                // BeamSearch ist in whisper-rs 0.12 als "WIP" markiert und
+                // produziert unabhängige Halluzinationen ("Das ist der erste
+                // Teil der Strecke." für beliebiges Input). Zurück auf Greedy.
+                // Der Repeat-Loop-Schutz kommt jetzt aus temperature_inc +
+                // entropy_thold + collapse_repetitions() als Post-Filter.
+                let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
                 if let Some(l) = lang {
                     params.set_language(Some(l));
                 }
@@ -106,7 +105,10 @@ impl TranscriptionBackend for LocalWhisperBackend {
                             .map_err(|e| AppError::Transcription(e.to_string()))?,
                     );
                 }
-                Ok((collapse_repetitions(text.trim()), start.elapsed().as_millis() as u64))
+                Ok((
+                    strip_trailing_hallucinations(&collapse_repetitions(text.trim())),
+                    start.elapsed().as_millis() as u64,
+                ))
             })
             .await
             .map_err(|e| AppError::Transcription(e.to_string()))??;
@@ -160,9 +162,83 @@ fn collapse_repetitions(text: &str) -> String {
     trimmed.to_string()
 }
 
+/// Schneidet die notorischen Whisper-Trailing-Halluzinationen vom Ende
+/// des Transkripts. Whisper ist stark auf YouTube-Videos trainiert, die
+/// mit Floskeln wie „Danke fürs Zuschauen" / „Untertitel …" enden — das
+/// Modell hängt diese dann auch an Diktate dran, die eigentlich leer
+/// auslaufen (Stille am Ende = Modell „beendet" den Kontext mit der
+/// gelernten Schlussformel).
+fn strip_trailing_hallucinations(text: &str) -> String {
+    const TRIM_CHARS: &[char] = &[' ', '\t', '\n', '.', ',', '!', '?', '"', '\''];
+    let mut out = text.trim().trim_end_matches(TRIM_CHARS).trim().to_string();
+    loop {
+        let lower = out.to_lowercase();
+        let mut matched = false;
+        for needle in TRAILING_HALLUCINATIONS {
+            if lower.ends_with(needle) {
+                // Needle ist ASCII-lowercase; unsere Matching-Kopie `lower`
+                // wurde per `to_lowercase()` aus `out` gebildet. `char_indices`
+                // über `lower` und `out` laufen i.d.R. synchron, aber bei
+                // Groß-/Kleinschreibung kann sich die Byte-Länge unterscheiden
+                // (z.B. „ß" → „ss"). Deshalb kürzen wir `out` zeichenweise:
+                // wir zählen so viele chars ab wie im needle, vom Ende aus.
+                let needle_chars = needle.chars().count();
+                let cut_byte = out
+                    .char_indices()
+                    .nth_back(needle_chars - 1)
+                    .map(|(i, _)| i)
+                    .unwrap_or(0);
+                out.truncate(cut_byte);
+                out = out.trim_end_matches(TRIM_CHARS).trim().to_string();
+                matched = true;
+                break;
+            }
+        }
+        if !matched {
+            return out;
+        }
+    }
+}
+
+/// Alle Einträge kleingeschrieben & in Whisper-typischer Form (mit Punkt
+/// teils optional — wir strippen Trailing-Zeichen zuerst). Reihenfolge:
+/// längere zuerst, damit Präfixe nicht fälschlich kurze Matches sind.
+const TRAILING_HALLUCINATIONS: &[&str] = &[
+    "untertitel im auftrag des zdf für funk, 2017",
+    "untertitelung im auftrag des zdf, 2017",
+    "untertitelung im auftrag des zdf",
+    "untertitel von stephanie geiges",
+    "untertitel der amara.org-community",
+    "untertitel der amara.org community",
+    "untertitel von amara.org",
+    "untertitel",
+    "danke fürs zuschauen",
+    "danke für's zuschauen",
+    "danke fürs zusehen",
+    "vielen dank fürs zuschauen",
+    "vielen dank für's zuschauen",
+    "vielen dank",
+    "bis zum nächsten mal",
+    "bis zum nächsten video",
+    "wir sehen uns im nächsten video",
+    "wir sehen uns",
+    "schreibt es in die kommentare",
+    "schreibt das in die kommentare",
+    "schreibt in die kommentare",
+    "lasst es in den kommentaren",
+    "lasst mir das in den kommentaren",
+    "abonniert den kanal",
+    "abonniert meinen kanal",
+    "nicht vergessen zu abonnieren",
+    "thanks for watching",
+    "thank you for watching",
+    "please like and subscribe",
+    "like and subscribe",
+];
+
 #[cfg(test)]
 mod tests {
-    use super::collapse_repetitions;
+    use super::{collapse_repetitions, strip_trailing_hallucinations};
 
     #[test]
     fn passthrough_non_repeating() {
@@ -189,5 +265,26 @@ mod tests {
         // "ja ja" ist zwei Wörter — unter der 4-Wort-Phrase-Schwelle.
         let s = "ja ja ja ja ja";
         assert_eq!(collapse_repetitions(s), s);
+    }
+
+    #[test]
+    fn strips_danke_fuers_zuschauen() {
+        let s = "Mein Name ist Matthias Geist und ich bin 53 Jahre alt. Danke fürs Zuschauen.";
+        assert_eq!(
+            strip_trailing_hallucinations(s),
+            "Mein Name ist Matthias Geist und ich bin 53 Jahre alt"
+        );
+    }
+
+    #[test]
+    fn strips_multiple_trailing_hallucinations() {
+        let s = "Hallo Welt. Danke fürs Zuschauen. Vielen Dank.";
+        assert_eq!(strip_trailing_hallucinations(s), "Hallo Welt");
+    }
+
+    #[test]
+    fn leaves_real_text_alone() {
+        let s = "Ich gehe jetzt einkaufen und komme gleich wieder.";
+        assert_eq!(strip_trailing_hallucinations(s), s.trim_end_matches('.'));
     }
 }
