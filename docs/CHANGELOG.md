@@ -1,5 +1,12 @@
 # Dictatr — Änderungs-Log
 
+## Unreleased
+
+- **Zwischenablage-Modi pro Profil:**
+  - `clipboard_only` (Checkbox „Nur in Zwischenablage (kein Auto-Einfügen)") — Text landet ausschließlich in der Zwischenablage, kein `Ctrl+V`-Chord wird synthetisiert. Fix für Remote-Desktop-Fenster (RDP-Client fängt Tastatur-Events vor lokalem Hook ab) und elevierte Zielprozesse (Windows-UIPI blockt Low-Integrity-Eingaben an High-Integrity-Fenster).
+  - `keep_on_clipboard` (Checkbox „Text ins Clipboard kopieren") — lässt den transkribierten Text nach dem Auto-Paste auch in der Zwischenablage liegen, statt den vorher gespeicherten Clipboard-Inhalt zu restaurieren.
+- Beide Schalter sind pro Profil konfigurierbar; Default ist das alte Verhalten (Auto-Paste + Restore). Tooltips direkt in der UI erklären den Zweck.
+
 ## v0.1.5 — 2026-04-15 — Hotfix: Hotkeys lösten in 0.1.4 nicht aus
 
 In v0.1.4 wurde der `GlobalHotKeyManager` auf einen eigenen Owner-Thread verschoben — das war falsch: dessen HWND empfängt `WM_HOTKEY` nur auf einem Thread mit laufendem Win32-Message-Pump. Der Owner blockierte stattdessen auf `mpsc::recv()`, also kamen keine Events an. Hotkeys wie `Ctrl+F7` oder `Ctrl+Alt+F8` waren registriert, haben aber nie gefeuert; nur LaunchMail & Co. funktionierten weiter, weil der LL-Hook einen eigenen Message-Pump-Thread unterhält.

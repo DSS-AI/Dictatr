@@ -16,7 +16,11 @@ Remote-Whisper, lokales whisper.cpp und LLM-Provider mit Audio-Input (Gemini 2.5
 - **Wörterbuch**: Ein Begriff pro Zeile, live editierbar (kein Neustart), wird als Hint an Whisper und als Kontext an das Post-Processing-LLM gegeben.
 - **Audio-Preview**: „Mikrofon testen"-Button mit Live-Pegelanzeige im Audio-Tab.
 - **Sound-Cues** beim Aufnahme-Start/-Stopp (aufsteigender/absteigender Zwei-Ton-Chirp).
-- **Tray-Menü** mit Settings und Beenden; Settings-Fenster versteckt sich beim Schließen, startet wieder über den Tray.
+- **Zwischenablage-Modi pro Profil**:
+  - „Nur in Zwischenablage (kein Auto-Einfügen)" — Text landet nach dem Diktat nur im Clipboard, du fügst selbst mit Strg+V ein. Sinnvoll für Remote-Desktop-Fenster oder elevierte Apps (PowerShell als Admin), in die das automatische Einfügen durch Windows-UIPI oder RDP-Keyboard-Capture nicht durchkommt.
+  - „Text ins Clipboard kopieren" — Auto-Einfügen läuft wie gewohnt, aber der transkribierte Text bleibt zusätzlich in der Zwischenablage liegen (normal würde der alte Clipboard-Inhalt wiederhergestellt).
+- **Tray-Menü** mit „Einstellungen", „Neustart" und „Beenden"; „Neustart" hilft, wenn größere Config-Änderungen (Backend, LLM-Provider, API-Keys) einen sauberen Restart brauchen.
+- **Hotkey-Änderungen greifen live** — nach „Speichern" wird die globale Hotkey-Registrierung im laufenden Prozess ausgetauscht, kein App-Neustart nötig.
 - **Sichere Key-Verwaltung**: API-Keys liegen im OS-Keyring (Windows Credential Manager / macOS Keychain), nicht in `config.json`.
 - **History** der letzten Transkripte mit Copy-Icon und Löschen.
 - **Tooltips** bei Hover auf erklärungsbedürftige Felder; abschaltbar unter „Allgemein".
