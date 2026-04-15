@@ -24,6 +24,8 @@ export interface Profile {
   language: Language;
   post_processing: PostProcessing;
   llm_transcription: LlmTranscription;
+  clipboard_only: boolean;
+  keep_on_clipboard: boolean;
 }
 
 export interface LlmProviderConfig {

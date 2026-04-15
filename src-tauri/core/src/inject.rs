@@ -13,11 +13,16 @@ impl TextInjector {
     /// combinations. Putting the text on the clipboard and sending the
     /// platform paste chord is the robust path every major dictation tool
     /// uses.
-    pub fn inject(text: &str) -> Result<()> {
-        // Preserve whatever the user had on the clipboard.
-        let prev = arboard::Clipboard::new()
-            .ok()
-            .and_then(|mut cb| cb.get_text().ok());
+    pub fn inject(text: &str, keep_on_clipboard: bool) -> Result<()> {
+        // Preserve the user's previous clipboard unless the profile asks to
+        // keep the transcribed text there afterwards.
+        let prev = if keep_on_clipboard {
+            None
+        } else {
+            arboard::Clipboard::new()
+                .ok()
+                .and_then(|mut cb| cb.get_text().ok())
+        };
 
         {
             let mut cb = arboard::Clipboard::new()

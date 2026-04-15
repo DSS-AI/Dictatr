@@ -192,11 +192,16 @@ impl Orchestrator {
 
         // --- Inject -------------------------------------------------------------
         eprintln!("[orch] injecting {} chars: {:?}", final_text.len(), final_text.chars().take(60).collect::<String>());
-        match TextInjector::inject(&final_text) {
-            Ok(()) => eprintln!("[orch] inject OK"),
-            Err(e) => {
-                eprintln!("injection failed, falling back to clipboard: {e:?}");
-                TextInjector::clipboard_fallback(&final_text)?;
+        if profile.clipboard_only {
+            TextInjector::clipboard_fallback(&final_text)?;
+            eprintln!("[orch] clipboard-only mode — user pastes manually");
+        } else {
+            match TextInjector::inject(&final_text, profile.keep_on_clipboard) {
+                Ok(()) => eprintln!("[orch] inject OK"),
+                Err(e) => {
+                    eprintln!("injection failed, falling back to clipboard: {e:?}");
+                    TextInjector::clipboard_fallback(&final_text)?;
+                }
             }
         }
 
