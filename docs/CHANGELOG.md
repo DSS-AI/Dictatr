@@ -1,5 +1,13 @@
 # Dictatr — Änderungs-Log
 
+## v0.1.3 — 2026-04-15 — Updater funktionsfähig
+
+- **ACL-Capabilities ergänzt** (`src-tauri/capabilities/default.json`): Ohne diese Datei blockt Tauri 2 alle Plugin-Commands aus dem Webview. Fixt `Command plugin:updater|check not allowed by ACL` beim Klick auf „Nach Updates suchen" und sorgt nebenbei dafür, dass `getVersion()` in der Allgemein-Seite die App-Version liefert (dazu musste auch `core:default` gegrantet werden).
+- **`bundle.createUpdaterArtifacts: true`** in `tauri.conf.json` aktiviert: Ohne dieses Opt-In markiert `tauri-cli` die `.msi.zip`/`.app.tar.gz`-Updater-Bundles nicht als solche, `tauri-action` findet die `.sig`-Files nicht und überspringt den `latest.json`-Upload mit `Signature not found for the updater JSON. Skipping upload...`. Genau das war in v0.1.2 passiert — Release hatte nur Binaries, keine Signaturen, keine `latest.json` → Updater konnte nichts finden.
+- **Release-Workflow-Matrix** (aus `feat/macos-port`): `.github/workflows/release.yml` baut jetzt parallel `windows-latest` + `macos-latest (aarch64-apple-darwin)`, erzeugt MSI + DMG + `.app.tar.gz` + jeweilige `.sig`-Files; `tauri-action` mergt die `latest.json`-Plattform-Einträge automatisch.
+
+**v0.1.2 bleibt als unvollständiges Release liegen** (Binaries ohne Signatur/`latest.json`, Updater-untauglich). Erster funktionierender Auto-Updater-Sprung ist von installiertem v0.1.3 auf alles Spätere; wer noch auf v0.1.1/v0.1.2 sitzt, muss die v0.1.3-MSI einmal manuell installieren.
+
 ## Phase 3 — macOS-Port Follow-ups (in Arbeit)
 
 ### TCC-Permissions auf macOS 26 beta

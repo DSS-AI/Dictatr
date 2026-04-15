@@ -165,17 +165,23 @@ Stand Phase 1 MVP: **24 Rust-Unit-Tests grün** (Ringbuffer, Resample, State-Mac
 
 MSI wurde via `bun run tauri build` auf dem Windows-Host erstellt, auf einem frischen Windows-11-Test-Rechner installiert und erfolgreich gestartet.
 
-### Phase 2 — Auto-Updater (2026-04-14)
+### Phase 2 — Auto-Updater (ab 2026-04-14, funktionsfähig mit v0.1.3)
 
-- `tauri-plugin-updater` + `tauri-plugin-process`, `plugins.updater`-Endpoint in `tauri.conf.json` auf `https://github.com/DSS-AI/Dictatr/releases/latest/download/latest.json`
+- `tauri-plugin-updater` + `tauri-plugin-process`, `plugins.updater`-Endpoint auf `https://github.com/DSS-AI/Dictatr/releases/latest/download/latest.json`
 - Auto-Check beim App-Start (abschaltbar via `general.check_updates`), manueller Button im Allgemein-Tab, `UpdateBanner` mit Download-Progress + Relaunch
-- Release-Prozess in [`docs/RELEASE.md`](docs/RELEASE.md) dokumentiert — **primär:** GitHub-Actions-Workflow (`.github/workflows/release.yml`) triggert auf `v*`-Tag-Push und baut signiert auf `windows-latest`; **Fallback:** manueller Build vom Windows-Host
-- Einmaliges Setup: `bunx @tauri-apps/cli signer generate` auf Windows, Pubkey in `tauri.conf.json`, Private Key + Passwort als Repo-Secrets (`TAURI_SIGNING_PRIVATE_KEY` / `_PASSWORD`) und lokal als User-Env-Vars
+- CI-Workflow `.github/workflows/release.yml` baut Matrix `windows-latest` + `macos-latest (aarch64)` auf jedem `v*`-Tag-Push; `tauri-action` mergt die `latest.json`-Plattform-Einträge
+- **Zwei Pflicht-Configs** (sonst ist der Updater tot):
+  - `src-tauri/capabilities/default.json` grantet `core:default` + `updater:default` + `process:default` — ohne das scheitert der Webview-Call mit „not allowed by ACL" und `getVersion()` liefert nichts.
+  - `bundle.createUpdaterArtifacts: true` in `tauri.conf.json` — ohne das markiert `tauri-cli` die `.msi.zip`/`.app.tar.gz` nicht als Updater-Bundles, `tauri-action` skippt den `latest.json`-Upload stillschweigend, Release enthält nur Binaries (genau der Fehler in v0.1.2).
+- Einmaliges Setup: `bunx @tauri-apps/cli signer generate` auf Windows, Pubkey in `tauri.conf.json`, Private Key + Passwort als Repo-Secrets (`TAURI_SIGNING_PRIVATE_KEY` / `_PASSWORD`) und **lokal als User-Env-Vars** (mit `createUpdaterArtifacts=true` verlangt auch `bun run tauri build` lokal die Keys — MSI wird trotzdem fertig, nur der Signing-Schritt scheitert).
+- Details + Troubleshooting: [`docs/RELEASE.md`](docs/RELEASE.md), Versions-History: [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
 
-### Deferred auf Phase 3
+### Phase 3 — macOS-Port (in Arbeit, `feat/macos-port` gemerged 2026-04-15)
 
-- **macOS-Port** (Accessibility-Permissions, Notarization)
-- **Kontext-aware Prompts** + Command-Mode
+- Cross-platform Keystroke-Injection via enigo; `tools/macos-*.sh`-Wrappers für cmake/clang
+- Whisper-Halluzinations-Fixes (Non-Speech-Token-Suppression, Temperature-Fallback, Trailing-Hallucination-Stripper)
+- TCC-Permission-Fix: `tools/macos-resign.sh` re-signiert ad-hoc ohne Hardened Runtime (sonst schluckt macOS 26 den Mic-Dialog stumm)
+- **Offen:** Developer-ID-Signatur + Notarization, Kontext-aware Prompts, Command-Mode
 
 ---
 

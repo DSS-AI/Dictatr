@@ -21,6 +21,20 @@ Auf https://github.com/DSS-AI/Dictatr/settings/secrets/actions folgende **Reposi
 
 Der Public Key muss bereits in `src-tauri/tauri.conf.json` unter `plugins.updater.pubkey` stehen (siehe Schritt 1 im manuellen Prozess unten).
 
+### Pflicht-Konfig in `tauri.conf.json`
+
+- `bundle.createUpdaterArtifacts: true` — **ohne das Flag** tagged `tauri-cli` die `.msi.zip` / `.app.tar.gz`-Bundles nicht als Updater-Artefakte, `tauri-action` meldet `Signature not found for the updater JSON. Skipping upload...` und im Release liegen am Ende nur Binaries, **keine `.sig`-Files und keine `latest.json`**. Bug-Symptom im Client: `Could not fetch a valid release JSON from the remote`. (Genau das war in v0.1.2 passiert — siehe CHANGELOG.)
+- `plugins.updater.endpoints` / `plugins.updater.pubkey` — siehe unten.
+
+### ACL-Capabilities (Pflicht für Tauri 2)
+
+`src-tauri/capabilities/default.json` muss dem Main-Window mindestens `core:default`, `updater:default`, `process:default` granten, sonst:
+
+- `plugin:updater|check` / `plugin:updater|download-and-install` / `plugin:process|restart` brechen mit „not allowed by ACL" ab.
+- `getVersion()` (`core:app:allow-version`) liefert still nichts → Versionsanzeige zeigt `?`.
+
+Die Datei ist im Repo; neue Capabilities ergänzen, wenn Plugin-Commands aus dem Webview nicht greifen.
+
 ### Release raushauen
 
 ```powershell
@@ -68,6 +82,8 @@ Als **User-Environment-Variablen** (Windows: „Systemumgebungsvariablen bearbei
 `bun run tauri build` liest die beiden Variablen und signiert den MSI-Build automatisch.
 
 Für CI (Weg A) den **gleichen Inhalt** zusätzlich als GitHub-Repo-Secrets hinterlegen (siehe oben).
+
+**Gotcha:** Mit `bundle.createUpdaterArtifacts: true` **verlangt** `bun run tauri build` die Env-Vars auch lokal. Fehlen sie, wird die MSI noch fertig gebaut, aber der Bundler-Step danach scheitert mit `A public key has been found, but no private key.` und der Build-Prozess endet mit Exit-Code 1. Die MSI unter `src-tauri/target/release/bundle/msi/Dictatr_*_x64_en-US.msi` ist trotzdem valide und installierbar — nur die `.msi.zip.sig` fehlt.
 
 ---
 
