@@ -1,5 +1,11 @@
 # Dictatr — Änderungs-Log
 
+## v0.1.5 — 2026-04-15 — Hotfix: Hotkeys lösten in 0.1.4 nicht aus
+
+In v0.1.4 wurde der `GlobalHotKeyManager` auf einen eigenen Owner-Thread verschoben — das war falsch: dessen HWND empfängt `WM_HOTKEY` nur auf einem Thread mit laufendem Win32-Message-Pump. Der Owner blockierte stattdessen auf `mpsc::recv()`, also kamen keine Events an. Hotkeys wie `Ctrl+F7` oder `Ctrl+Alt+F8` waren registriert, haben aber nie gefeuert; nur LaunchMail & Co. funktionierten weiter, weil der LL-Hook einen eigenen Message-Pump-Thread unterhält.
+
+**Fix:** Manager wieder auf Tauri-Main-Thread pinnen (der pumpt Messages), Registry über `thread_local!` + `run_on_main_thread`-Reload. Live-Reload bleibt erhalten.
+
 ## v0.1.4 — 2026-04-15 — Hotkey-Live-Reload + Tray-Neustart
 
 - **Hotkey-Änderungen greifen ohne App-Neustart:** `save_config` schickt einen Reload-Command an einen dedizierten Owner-Thread, der den `!Send` `GlobalHotKeyManager` hält und die Registry + shared ID-Map + LL-Hook-Mapping atomar neu aufbaut. Die bisherige Mechanik (Registry via `Box::leak` einfrieren) war tot — `save_config` schrieb nur die Datei, Hotkeys blieben auf dem Stand vom App-Start.
