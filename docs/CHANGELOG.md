@@ -1,5 +1,11 @@
 # Dictatr — Änderungs-Log
 
+## v0.1.4 — 2026-04-15 — Hotkey-Live-Reload + Tray-Neustart
+
+- **Hotkey-Änderungen greifen ohne App-Neustart:** `save_config` schickt einen Reload-Command an einen dedizierten Owner-Thread, der den `!Send` `GlobalHotKeyManager` hält und die Registry + shared ID-Map + LL-Hook-Mapping atomar neu aufbaut. Die bisherige Mechanik (Registry via `Box::leak` einfrieren) war tot — `save_config` schrieb nur die Datei, Hotkeys blieben auf dem Stand vom App-Start.
+- **`HotkeyRegistry::clear()` entfernt jetzt tatsächlich** die registrierten HotKeys. Vorher: `unregister_all(&[])` mit leerer Slice war ein no-op, was auch die bisherige Reload-Intention unterwandert hätte.
+- **Tray-Menü um „Neustart" erweitert** — nutzt `AppHandle::restart()`. Deckt die Fälle ab, die kein Live-Reload haben (Backend-Wechsel, LLM-Provider, API-Key-Updates), weil der Orchestrator nach wie vor einen Profile-Snapshot hält.
+
 ## v0.1.3 — 2026-04-15 — Updater funktionsfähig
 
 - **ACL-Capabilities ergänzt** (`src-tauri/capabilities/default.json`): Ohne diese Datei blockt Tauri 2 alle Plugin-Commands aus dem Webview. Fixt `Command plugin:updater|check not allowed by ACL` beim Klick auf „Nach Updates suchen" und sorgt nebenbei dafür, dass `getVersion()` in der Allgemein-Seite die App-Version liefert (dazu musste auch `core:default` gegrantet werden).
