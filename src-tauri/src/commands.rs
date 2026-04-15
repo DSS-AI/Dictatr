@@ -2,8 +2,15 @@ use dictatr_core::audio::capture::AudioCapture;
 use dictatr_core::audio::controller::AudioController;
 use parking_lot::Mutex;
 use std::path::PathBuf;
+use std::sync::mpsc::Sender;
 
 pub struct VocabularyPath(pub PathBuf);
+
+pub enum HotkeyCommand {
+    Reload(Vec<dictatr_core::config::profile::Profile>),
+}
+
+pub struct HotkeyCommandTx(pub Mutex<Sender<HotkeyCommand>>);
 use dictatr_core::config::{self, provider::ProviderType, AppConfig};
 use dictatr_core::history::{HistoryEntry, HistoryStore};
 use dictatr_core::llm::{
@@ -20,8 +27,13 @@ pub fn get_config() -> std::result::Result<AppConfig, String> {
 }
 
 #[tauri::command]
-pub fn save_config(cfg: AppConfig) -> std::result::Result<(), String> {
-    config::save(&cfg).map_err(|e| e.to_string())
+pub fn save_config(
+    cfg: AppConfig,
+    hk_tx: State<'_, HotkeyCommandTx>,
+) -> std::result::Result<(), String> {
+    config::save(&cfg).map_err(|e| e.to_string())?;
+    let _ = hk_tx.0.lock().send(HotkeyCommand::Reload(cfg.profiles));
+    Ok(())
 }
 
 #[tauri::command]

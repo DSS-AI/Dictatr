@@ -121,6 +121,14 @@ mod windows_impl {
         })
     }
 
+    /// Replace the active vk → profile mapping without restarting the hook
+    /// thread. Call from the hotkey-owner thread on profile reload.
+    pub fn update_mapping(new_mapping: HashMap<u32, Uuid>) {
+        let mut s = state().lock();
+        s.mapping = new_mapping;
+        s.pressed.clear();
+    }
+
     unsafe extern "system" fn hook_proc(n_code: i32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
         if n_code != HC_ACTION as i32 {
             return CallNextHookEx(std::ptr::null_mut(), n_code, w_param, l_param);
@@ -206,4 +214,6 @@ mod stub {
     pub fn parse_vk(_name: &str) -> Option<u32> {
         None
     }
+
+    pub fn update_mapping(_new: HashMap<u32, Uuid>) {}
 }

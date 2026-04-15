@@ -8,7 +8,8 @@ mod tray;
 use dictatr_core::audio::controller::AudioController;
 use dictatr_core::config;
 use dictatr_core::history::HistoryStore;
-use dictatr_core::hotkey::{HotkeyEvent, HotkeyRegistry};
+use dictatr_core::config::profile::Profile;
+use dictatr_core::hotkey::{HotkeyEvent, HotkeyRegistry, SharedIdMap};
 use dictatr_core::llm::{anthropic::AnthropicProvider, openai_compat::OpenAiCompatProvider, LlmProvider};
 use dictatr_core::orchestrator::Orchestrator;
 use dictatr_core::secrets;
@@ -23,6 +24,17 @@ use std::sync::Arc;
 use tauri::Manager;
 use tokio::sync::mpsc;
 use uuid::Uuid;
+
+fn apply_profiles(registry: &mut HotkeyRegistry, profiles: &[Profile]) {
+    for p in profiles {
+        if let Err(e) = registry.register(p.id, &p.hotkey) {
+            eprintln!(
+                "failed to register hotkey {} for {}: {:?}",
+                p.hotkey, p.name, e
+            );
+        }
+    }
+}
 
 /// Return the path of the first installed ggml-*.bin under the models dir,
 /// preferring the largest file (so large-v3 wins over base if both exist).
@@ -120,30 +132,70 @@ fn main() {
             let profiles_map: HashMap<Uuid, _> = cfg.profiles.iter()
                 .map(|p| (p.id, p.clone())).collect();
 
-            let mut registry = HotkeyRegistry::new()
-                .expect("could not initialize hotkey manager");
-            for p in &cfg.profiles {
-                if let Err(e) = registry.register(p.id, &p.hotkey) {
-                    eprintln!("failed to register hotkey {} for {}: {:?}", p.hotkey, p.name, e);
-                }
-            }
-
             let (tx, rx) = mpsc::unbounded_channel::<HotkeyEvent>();
-            let id_map = registry.id_map();
-            let ll_keys = registry.ll_keys();
-            // GlobalHotKeyManager is !Send (holds an HWND). Keep it alive on the
-            // main thread by leaking it; the pump thread only needs the id map,
-            // since GlobalHotKeyEvent::receiver() is a global channel.
-            let _registry: &'static HotkeyRegistry = Box::leak(Box::new(registry));
-            let tx_pump = tx.clone();
-            std::thread::spawn(move || HotkeyRegistry::pump(id_map, tx_pump));
+            // Shared between the owner thread (writes on reload) and the pump
+            // thread (reads on every hotkey event), so Reload-commands from
+            // save_config take effect immediately.
+            let id_map_shared: SharedIdMap = Arc::new(Mutex::new(HashMap::new()));
 
-            if !ll_keys.is_empty() {
-                match dictatr_core::hotkey_ll::start(ll_keys, tx.clone()) {
-                    Ok(hook) => { Box::leak(Box::new(hook)); }
-                    Err(e) => eprintln!("low-level hotkey hook failed: {e:?}"),
-                }
-            }
+            let pump_map = id_map_shared.clone();
+            let pump_tx = tx.clone();
+            std::thread::Builder::new()
+                .name("dictatr-hotkey-pump".into())
+                .spawn(move || HotkeyRegistry::pump_shared(pump_map, pump_tx))
+                .expect("spawn hotkey pump");
+
+            // Owner thread: owns the !Send GlobalHotKeyManager, registers the
+            // initial profiles, starts the LL hook, then loops on Reload
+            // commands from the save_config IPC command.
+            let (hk_cmd_tx, hk_cmd_rx) =
+                std::sync::mpsc::channel::<commands::HotkeyCommand>();
+            let owner_map = id_map_shared.clone();
+            let owner_tx = tx.clone();
+            let initial_profiles: Vec<Profile> = cfg.profiles.clone();
+            std::thread::Builder::new()
+                .name("dictatr-hotkey-owner".into())
+                .spawn(move || {
+                    let mut registry = match HotkeyRegistry::new() {
+                        Ok(r) => r,
+                        Err(e) => {
+                            eprintln!("hotkey manager init failed: {e:?}");
+                            return;
+                        }
+                    };
+                    apply_profiles(&mut registry, &initial_profiles);
+                    *owner_map.lock() = registry.id_map();
+
+                    // The LL hook runs permanently: when mapping is empty it's a
+                    // pure no-op (CallNextHookEx), so we can start it once and
+                    // just update the mapping on every Reload.
+                    let _hook = match dictatr_core::hotkey_ll::start(
+                        registry.ll_keys(),
+                        owner_tx.clone(),
+                    ) {
+                        Ok(h) => Some(h),
+                        Err(e) => {
+                            eprintln!("low-level hotkey hook failed: {e:?}");
+                            None
+                        }
+                    };
+
+                    while let Ok(cmd) = hk_cmd_rx.recv() {
+                        match cmd {
+                            commands::HotkeyCommand::Reload(profiles) => {
+                                registry.clear();
+                                apply_profiles(&mut registry, &profiles);
+                                *owner_map.lock() = registry.id_map();
+                                dictatr_core::hotkey_ll::update_mapping(
+                                    registry.ll_keys(),
+                                );
+                            }
+                        }
+                    }
+                })
+                .expect("spawn hotkey owner");
+
+            app.manage(commands::HotkeyCommandTx(Mutex::new(hk_cmd_tx)));
             drop(tx);
 
             let audio = Arc::new(AudioController::spawn(cfg.general.max_recording_seconds));

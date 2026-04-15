@@ -4,8 +4,9 @@ use tauri::{AppHandle, Manager};
 
 pub fn setup(app: &AppHandle) -> tauri::Result<()> {
     let open_settings = MenuItem::with_id(app, "open_settings", "Einstellungen", true, None::<&str>)?;
+    let restart = MenuItem::with_id(app, "restart", "Neustart", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Beenden", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open_settings, &quit])?;
+    let menu = Menu::with_items(app, &[&open_settings, &restart, &quit])?;
 
     TrayIconBuilder::with_id("main-tray")
         .icon(app.default_window_icon().cloned().unwrap())
@@ -21,6 +22,9 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
                     let _ = win.set_focus();
                     let _ = win.set_always_on_top(false);
                 }
+            }
+            "restart" => {
+                app.restart();
             }
             "quit" => {
                 app.exit(0);
