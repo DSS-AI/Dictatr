@@ -36,6 +36,29 @@ fn apply_profiles(registry: &mut HotkeyRegistry, profiles: &[Profile]) {
     }
 }
 
+// The GlobalHotKeyManager creates a hidden HWND that only receives WM_HOTKEY
+// on the thread running a Win32 message pump. Tauri's main thread pumps, so we
+// pin the registry there via a thread_local. The shared id_map lets the pump
+// thread resolve new IDs after a reload without touching the registry itself.
+thread_local! {
+    static HOTKEY_REGISTRY: std::cell::RefCell<Option<HotkeyRegistry>> =
+        const { std::cell::RefCell::new(None) };
+}
+static HOTKEY_ID_MAP: std::sync::OnceLock<SharedIdMap> = std::sync::OnceLock::new();
+
+pub(crate) fn reload_hotkeys(profiles: &[Profile]) {
+    HOTKEY_REGISTRY.with(|cell| {
+        if let Some(reg) = cell.borrow_mut().as_mut() {
+            reg.clear();
+            apply_profiles(reg, profiles);
+            if let Some(map) = HOTKEY_ID_MAP.get() {
+                *map.lock() = reg.id_map();
+            }
+            dictatr_core::hotkey_ll::update_mapping(reg.ll_keys());
+        }
+    });
+}
+
 /// Return the path of the first installed ggml-*.bin under the models dir,
 /// preferring the largest file (so large-v3 wins over base if both exist).
 fn first_installed_model(dir: &std::path::Path) -> Option<std::path::PathBuf> {
@@ -133,10 +156,8 @@ fn main() {
                 .map(|p| (p.id, p.clone())).collect();
 
             let (tx, rx) = mpsc::unbounded_channel::<HotkeyEvent>();
-            // Shared between the owner thread (writes on reload) and the pump
-            // thread (reads on every hotkey event), so Reload-commands from
-            // save_config take effect immediately.
             let id_map_shared: SharedIdMap = Arc::new(Mutex::new(HashMap::new()));
+            let _ = HOTKEY_ID_MAP.set(id_map_shared.clone());
 
             let pump_map = id_map_shared.clone();
             let pump_tx = tx.clone();
@@ -145,57 +166,21 @@ fn main() {
                 .spawn(move || HotkeyRegistry::pump_shared(pump_map, pump_tx))
                 .expect("spawn hotkey pump");
 
-            // Owner thread: owns the !Send GlobalHotKeyManager, registers the
-            // initial profiles, starts the LL hook, then loops on Reload
-            // commands from the save_config IPC command.
-            let (hk_cmd_tx, hk_cmd_rx) =
-                std::sync::mpsc::channel::<commands::HotkeyCommand>();
-            let owner_map = id_map_shared.clone();
-            let owner_tx = tx.clone();
-            let initial_profiles: Vec<Profile> = cfg.profiles.clone();
-            std::thread::Builder::new()
-                .name("dictatr-hotkey-owner".into())
-                .spawn(move || {
-                    let mut registry = match HotkeyRegistry::new() {
-                        Ok(r) => r,
-                        Err(e) => {
-                            eprintln!("hotkey manager init failed: {e:?}");
-                            return;
-                        }
-                    };
-                    apply_profiles(&mut registry, &initial_profiles);
-                    *owner_map.lock() = registry.id_map();
+            // Manager + HWND live on the Tauri main thread, which pumps Win32
+            // messages for us; reloads come back here via run_on_main_thread.
+            let mut registry = HotkeyRegistry::new()
+                .expect("could not initialize hotkey manager");
+            apply_profiles(&mut registry, &cfg.profiles);
+            *id_map_shared.lock() = registry.id_map();
 
-                    // The LL hook runs permanently: when mapping is empty it's a
-                    // pure no-op (CallNextHookEx), so we can start it once and
-                    // just update the mapping on every Reload.
-                    let _hook = match dictatr_core::hotkey_ll::start(
-                        registry.ll_keys(),
-                        owner_tx.clone(),
-                    ) {
-                        Ok(h) => Some(h),
-                        Err(e) => {
-                            eprintln!("low-level hotkey hook failed: {e:?}");
-                            None
-                        }
-                    };
+            // LL hook starts once with the current multimedia-key mapping and
+            // stays alive for the app lifetime; Reload only swaps its mapping.
+            match dictatr_core::hotkey_ll::start(registry.ll_keys(), tx.clone()) {
+                Ok(hook) => { Box::leak(Box::new(hook)); }
+                Err(e) => eprintln!("low-level hotkey hook failed: {e:?}"),
+            }
 
-                    while let Ok(cmd) = hk_cmd_rx.recv() {
-                        match cmd {
-                            commands::HotkeyCommand::Reload(profiles) => {
-                                registry.clear();
-                                apply_profiles(&mut registry, &profiles);
-                                *owner_map.lock() = registry.id_map();
-                                dictatr_core::hotkey_ll::update_mapping(
-                                    registry.ll_keys(),
-                                );
-                            }
-                        }
-                    }
-                })
-                .expect("spawn hotkey owner");
-
-            app.manage(commands::HotkeyCommandTx(Mutex::new(hk_cmd_tx)));
+            HOTKEY_REGISTRY.with(|cell| *cell.borrow_mut() = Some(registry));
             drop(tx);
 
             let audio = Arc::new(AudioController::spawn(cfg.general.max_recording_seconds));
