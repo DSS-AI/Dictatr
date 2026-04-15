@@ -55,6 +55,12 @@ fn main() {
             }
         })
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            {
+                dictatr_core::inject::prompt_microphone_if_needed();
+                dictatr_core::inject::prompt_accessibility_if_needed();
+            }
+
             let handle = app.handle().clone();
             tray::setup(&handle)?;
 

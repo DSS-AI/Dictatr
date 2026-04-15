@@ -7,10 +7,10 @@ Remote-Whisper, lokales whisper.cpp und LLM-Provider mit Audio-Input (Gemini 2.5
 ## Features
 
 - **Hotkeys**: normale Kombos (Ctrl+Alt+Space …) per `global-hotkey`, zusätzlich Windows-Multimedia- und Launch-Tasten (LaunchMail, VolumeUp, BrowserHome, Media-Keys …) via Low-Level-Keyboard-Hook — Outlook & Co. werden dabei unterdrückt. Push-to-talk oder Toggle pro Profil.
-- **Transkriptions-Backends** pro Profil wählbar:
-  - **GPU-Server** — OpenAI-kompatibler Whisper-Server (z. B. `faster-whisper-server`) im LAN
-  - **Lokal (whisper.cpp)** — heruntergeladenes `ggml-*.bin` (tiny / base / small / medium / large-v3), CPU
-  - **LLM-Provider (Chat-Audio)** — Chat-Completion mit `input_audio`-Content-Part (Gemini 2.5 Flash/Pro via OpenRouter, gpt-4o-audio-preview)
+- **Transkriptions-Backends** pro Profil wählbar. Für deutsches Diktat empfohlen in dieser Reihenfolge:
+  1. **LLM-Provider (Chat-Audio)** — Chat-Completion mit `input_audio`-Content-Part. Gemini 2.5 Flash/Pro via OpenRouter oder gpt-4o-audio-preview via OpenAI. Höchste Qualität, minimale Halluzinationen, Namen/Zahlen sitzen. Kostet pro Request, aber bei Dictatr-Nutzungs-Volumen vernachlässigbar. **Empfohlene Standard-Wahl.**
+  2. **GPU-Server** — OpenAI-kompatibler Whisper-Server (z. B. `faster-whisper-server`) im LAN. Server-seitig lässt sich Silero-VAD + `suppress_tokens`-Config sauber einrichten, was die Qualität gegenüber lokalem whisper.cpp deutlich anhebt.
+  3. **Lokal (whisper.cpp)** — heruntergeladenes `ggml-*.bin` (tiny / base / small / medium / large-v3), rein CPU (Metal-Beschleunigung wird von `whisper-rs` 0.12 auf Apple Silicon noch nicht zuverlässig unterstützt). **Nur als Offline-Fallback gedacht, sehr experimentell.** Kann auf Stille Trainingsdaten-Floskeln halluzinieren („Danke fürs Zuschauen", „Untertitel im Auftrag des ZDF", „Schreibt es in die Kommentare", „SWR 2020" usw.) und auf kurzen Utterances in Repeat-Loops kippen. Im Code sind mehrere Post-Filter aktiv (`collapse_repetitions`, `strip_trailing_hallucinations`, `temperature_inc`-Fallback), die die gröbsten Kanten abfangen — die Qualität kommt aber nicht an die LLM- oder Remote-GPU-Backends heran. Für produktive Nutzung nicht empfohlen.
 - **Post-Processing** (optional): beliebiger OpenAI-kompatibler oder Anthropic-LLM korrigiert das Transkript (Großschreibung, Interpunktion, Fachbegriffe aus dem Wörterbuch, eigener System-Prompt möglich).
 - **Modell-Manager**: Whisper-Modelle direkt aus der App von Huggingface laden, löschen, Größe & Status ablesen.
 - **Wörterbuch**: Ein Begriff pro Zeile, live editierbar (kein Neustart), wird als Hint an Whisper und als Kontext an das Post-Processing-LLM gegeben.
@@ -25,10 +25,17 @@ Remote-Whisper, lokales whisper.cpp und LLM-Provider mit Audio-Input (Gemini 2.5
 
 | Plattform | Installer |
 |-----------|-----------|
-| Windows (x64) | [Aktuelle Release auf GitHub](https://github.com/DSS-AI/Dictatr/releases/latest) — `.msi` herunterladen und ausführen |
-| macOS         | — noch kein Installer (Build aus Source, siehe unten) |
+| Windows (x64)        | [Aktuelle Release auf GitHub](https://github.com/DSS-AI/Dictatr/releases/latest) — `.msi` herunterladen und ausführen |
+| macOS (Apple Silicon)| Ab nächstem Release als `.dmg` verfügbar. Aktuell nur Build aus Source, siehe [`docs/BUILD-MACOS.md`](docs/BUILD-MACOS.md). Auf macOS 26 beta ist nach `bun run tauri build` zusätzlich `./tools/macos-resign.sh` nötig (ad-hoc-Re-Sign ohne Hardened Runtime), sonst blockiert TCC stumm die Mic- und Bedienungshilfen-Dialoge. |
 
 Nach der Installation aktualisiert sich Dictatr bei neuen Releases automatisch (Banner im Settings-Fenster oder Button „Nach Updates suchen" im Allgemein-Tab).
+
+## Empfohlenes Setup (für deutsches Diktat)
+
+1. **Transkriptions-Backend:** LLM-Chat-Audio mit Gemini 2.5 Flash via OpenRouter (günstig, schnell, sehr robust für Deutsch) oder gpt-4o-audio-preview via OpenAI. Key unter Settings → Provider hinterlegen, Profil auf „LLM (Chat-Audio)" stellen.
+2. **Hotkey:** Push-to-talk auf eine Taste, die nicht in Editor/Terminal kollidiert (z. B. eine unbenutzte Multimedia-/Funktionstaste oder `Ctrl+Alt+Space`).
+3. **Wörterbuch** mit wiederkehrenden Eigennamen/Fachbegriffen befüllen — wird als Kontext-Hint an das Backend übergeben.
+4. **Lokales whisper.cpp** nur als Offline-Fallback konfigurieren, falls Internet ausfällt; nicht als primären Pfad.
 
 ## Build
 
@@ -64,9 +71,9 @@ API-Keys landen **nicht** in der config, sondern im OS-Keyring.
 | Multimedia-/Systemtasten       | ✓       | ✗ (Stub, nicht implementiert) |
 | Remote-Whisper                 | ✓       | ✓     |
 | LLM-Transkription (Chat-Audio) | ✓       | ✓     |
-| Lokales whisper.cpp            | ✓       | ✓     |
+| Lokales whisper.cpp            | ✓ (experimentell) | ✓ (experimentell, CPU-only) |
 | Mic-Level-Preview              | ✓       | ✓     |
-| Text-Injection (Clipboard-Paste) | ✓     | ✓     |
+| Text-Injection (Clipboard-Paste) | ✓     | ✓ (auf macOS 26 beta ohne Developer ID: Text landet in Zwischenablage, manueller Cmd+V) |
 | Keyring                        | Credential Manager | Keychain |
 
 Details zu Änderungen: [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
