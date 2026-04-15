@@ -4,7 +4,7 @@ resolver = "2"
 
 [package]
 name = "dictatr"
-version = "0.1.1"
+version = "0.1.2"
 description = "Dictatr Dictation App"
 authors = ["DSS-AI"]
 edition = "2021"
