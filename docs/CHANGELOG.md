@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## v0.1.6 — 2026-04-16 — Autostart + Clipboard-Modi
+
+- **Autostart funktioniert jetzt tatsächlich:** `tauri-plugin-autostart` integriert — das Häkchen „Automatisch starten" registriert die App jetzt im Windows-Autostart (Registry `HKCU\...\Run`) bzw. macOS LaunchAgent. Vorher wurde nur ein Flag in der Config gespeichert, ohne OS-Effekt.
 - **Zwischenablage-Modi pro Profil:**
   - `clipboard_only` (Checkbox „Nur in Zwischenablage (kein Auto-Einfügen)") — Text landet ausschließlich in der Zwischenablage, kein `Ctrl+V`-Chord wird synthetisiert. Fix für Remote-Desktop-Fenster (RDP-Client fängt Tastatur-Events vor lokalem Hook ab) und elevierte Zielprozesse (Windows-UIPI blockt Low-Integrity-Eingaben an High-Integrity-Fenster).
   - `keep_on_clipboard` (Checkbox „Text ins Clipboard kopieren") — lässt den transkribierten Text nach dem Auto-Paste auch in der Zwischenablage liegen, statt den vorher gespeicherten Clipboard-Inhalt zu restaurieren.
