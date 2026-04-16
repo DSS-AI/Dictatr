@@ -57,7 +57,7 @@ export default function General() {
   return (
     <div>
       <h1>Allgemein</h1>
-      <label><input type="checkbox" checked={cfg.general.autostart} onChange={e => save({ autostart: e.target.checked })} /> Automatisch starten<InfoTip enabled={showTips} text="Dictatr beim Login automatisch in den Tray laden (aktuell manuell einzurichten: Windows-Autostart-Ordner bzw. macOS-Anmeldeobjekte in den Systemeinstellungen)." /></label>
+      <label><input type="checkbox" checked={cfg.general.autostart} onChange={e => save({ autostart: e.target.checked })} /> Automatisch starten<InfoTip enabled={showTips} text="Dictatr beim Login automatisch in den Tray laden." /></label>
       <label><input type="checkbox" checked={cfg.general.sounds} onChange={e => save({ sounds: e.target.checked })} /> Sounds abspielen<InfoTip enabled={showTips} text="Kurzer Zwei-Ton-Chirp beim Start (aufsteigend) und Ende (absteigend) der Aufnahme." /></label>
       <label><input type="checkbox" checked={cfg.general.overlay} onChange={e => save({ overlay: e.target.checked })} /> Mini-Overlay einblenden<InfoTip enabled={showTips} text="Während der Aufnahme ein kleines, immer-oben-Fenster mit Status und Pegelanzeige zeigen." /></label>
       <label><input type="checkbox" checked={cfg.general.show_tooltips} onChange={e => save({ show_tooltips: e.target.checked })} /> Hilfe-Tooltips bei Mouse-Over anzeigen</label>

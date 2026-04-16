@@ -108,6 +108,17 @@ fn main() {
 
             let cfg = config::load().unwrap_or_default();
 
+            // Sync autostart registry entry with config
+            {
+                use tauri_plugin_autostart::ManagerExt;
+                let autostart = app.autolaunch();
+                if cfg.general.autostart {
+                    let _ = autostart.enable();
+                } else {
+                    let _ = autostart.disable();
+                }
+            }
+
             let remote_url = std::env::var("DICTATR_REMOTE_URL")
                 .unwrap_or_else(|_| cfg.general.remote_whisper_url.clone());
             let remote_token = std::env::var("DICTATR_REMOTE_TOKEN").unwrap_or_default();
@@ -238,6 +249,10 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

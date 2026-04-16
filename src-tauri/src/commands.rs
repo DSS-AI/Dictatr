@@ -25,6 +25,18 @@ pub fn save_config(
     app: tauri::AppHandle,
 ) -> std::result::Result<(), String> {
     config::save(&cfg).map_err(|e| e.to_string())?;
+
+    // Sync autostart with OS
+    {
+        use tauri_plugin_autostart::ManagerExt;
+        let autostart = app.autolaunch();
+        if cfg.general.autostart {
+            let _ = autostart.enable();
+        } else {
+            let _ = autostart.disable();
+        }
+    }
+
     let profiles = cfg.profiles;
     // GlobalHotKeyManager is pinned to the main thread (its HWND only receives
     // WM_HOTKEY on a thread that pumps Win32 messages), so reload there.
