@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.1.7 — 2026-04-22 — Aufnahme-Indikator-Overlay
+
 - **Aufnahme-Indikator-Overlay:** Kleines, transparentes Pill-Overlay am unteren Rand des Primary Monitors (320×56, 40 px Bottom-Margin, `alwaysOnTop`, `skipTaskbar`, `focus:false`) wird während jeder laufenden Aufnahme eingeblendet. Zeigt einen pulsierenden roten REC-Dot plus eine symmetrische Oszilloskop-Waveform in Neon-Grün, die live auf den Mikrofon-RMS reagiert (sqrt-Perceptual-Curve, so dass normale Sprache bei ~0.1 RMS sichtbar ausschlägt ohne bei Peaks anzuschlagen). Das Overlay existierte als Window-Shell + HTML-Stub bereits seit Phase 1, war aber nie verdrahtet.
   - **State-Observer im Core** (`dictatr-core::orchestrator`): Neues optionales `state_observer: Option<Arc<dyn Fn(AppState) + Send + Sync>>`-Feld. Neue interne Helper `transition()` und `set_state()` feuern den Callback nach jeder State-Mutation, **außerhalb** des State-Locks, um Reentranz-Deadlocks auszuschließen. Core bleibt Tauri-frei (reiner `Fn`-Trait-Objekt-Callback).
   - **Observer-Closure in `main.rs`**: Arc'd Closure reagiert auf `AppState::Recording` → `overlay::show` / sonst → `overlay::hide`, jeweils via `run_on_main_thread`, damit Window-Calls immer auf dem Tauri-Main-Thread landen.
