@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## v0.1.9 — 2026-04-22 — Cloudflare Access + URL-Normalisierung
+
+- **Cloudflare Access Service-Token für den GPU-Server:** Zwei neue Felder im Allgemein-Tab („Client-ID" + „Client-Secret"). Die Client-ID landet in `config.json`, das Secret im OS-Keyring (`named-cf_access_secret`). `RemoteWhisperBackend` hängt bei belegten Credentials `CF-Access-Client-Id` + `CF-Access-Client-Secret` an beide Request-Sites an (`/v1/models`-Probe + `/v1/audio/transcriptions`). Erlaubt den Betrieb des Whisper-Servers hinter einem Cloudflare-Tunnel mit Access-Policy.
+- **URL-Schema optional:** Das GPU-Server-Feld akzeptiert jetzt bloße Hostnamen; fehlt das Schema, wird `https://` angenommen (`dictatr_core::config::normalize_remote_url`). Gilt sowohl für den Verbindungstest als auch für den tatsächlichen Transkriptions-Call zur Laufzeit.
+- **`test_remote_whisper` hat CF-Header-Parameter:** Der Test-Button schickt die aktuell im UI eingetragenen CF-Credentials mit — ein leeres Secret-Feld bei gesetzter Client-ID fällt automatisch auf den Keyring-Wert zurück, damit der Test nach einem Neustart ohne erneute Secret-Eingabe klappt.
+
 ## v0.1.8 — 2026-04-22 — GPU-Server-Verbindungstest
 
 - **„Verbindung testen"-Button im Allgemein-Tab** unter dem Feld „GPU-Server-Adresse". Neuer Tauri-Command `test_remote_whisper` probed `GET {url}/v1/models` mit 3 s Timeout und meldet Treffer inkl. Modell-Liste oder einen spezifischen Fehler (Timeout / Verbindung abgelehnt / HTTP-Status / ungültiges JSON). So ist vor dem ersten Diktat sichtbar, ob der OpenAI-kompatible Whisper-Server tatsächlich erreichbar ist — gerade praktisch beim Betrieb von verschiedenen Rechnern aus, wo der LAN-Hostname nicht überall auflöst.
