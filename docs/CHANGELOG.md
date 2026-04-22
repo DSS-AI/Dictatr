@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## v0.1.8 — 2026-04-22 — GPU-Server-Verbindungstest
+
+- **„Verbindung testen"-Button im Allgemein-Tab** unter dem Feld „GPU-Server-Adresse". Neuer Tauri-Command `test_remote_whisper` probed `GET {url}/v1/models` mit 3 s Timeout und meldet Treffer inkl. Modell-Liste oder einen spezifischen Fehler (Timeout / Verbindung abgelehnt / HTTP-Status / ungültiges JSON). So ist vor dem ersten Diktat sichtbar, ob der OpenAI-kompatible Whisper-Server tatsächlich erreichbar ist — gerade praktisch beim Betrieb von verschiedenen Rechnern aus, wo der LAN-Hostname nicht überall auflöst.
+
 ## v0.1.7 — 2026-04-22 — Aufnahme-Indikator-Overlay
 
 - **Aufnahme-Indikator-Overlay:** Kleines, transparentes Pill-Overlay am unteren Rand des Primary Monitors (320×56, 40 px Bottom-Margin, `alwaysOnTop`, `skipTaskbar`, `focus:false`) wird während jeder laufenden Aufnahme eingeblendet. Zeigt einen pulsierenden roten REC-Dot plus eine symmetrische Oszilloskop-Waveform in Neon-Grün, die live auf den Mikrofon-RMS reagiert (sqrt-Perceptual-Curve, so dass normale Sprache bei ~0.1 RMS sichtbar ausschlägt ohne bei Peaks anzuschlagen). Das Overlay existierte als Window-Shell + HTML-Stub bereits seit Phase 1, war aber nie verdrahtet.
