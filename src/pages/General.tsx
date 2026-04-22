@@ -25,9 +25,12 @@ export default function General() {
   const [version, setVersion] = useState<string>("");
   const [upd, setUpd] = useState<UpdateState>({ kind: "idle" });
   const [probe, setProbe] = useState<ProbeState>({ kind: "idle" });
+  const [cfSecretInput, setCfSecretInput] = useState<string>("");
+  const [cfSecretStored, setCfSecretStored] = useState<boolean>(false);
 
   useEffect(() => { ipc.getConfig().then(setCfg).catch(console.error); }, []);
   useEffect(() => { getVersion().then(setVersion).catch(() => setVersion("?")); }, []);
+  useEffect(() => { ipc.hasCfAccessSecret().then(setCfSecretStored).catch(() => {}); }, []);
 
   if (!cfg) return <div>Lade…</div>;
 
@@ -40,10 +43,25 @@ export default function General() {
   const runProbe = async () => {
     setProbe({ kind: "probing" });
     try {
-      const msg = await ipc.testRemoteWhisper(cfg.general.remote_whisper_url);
+      const msg = await ipc.testRemoteWhisper(
+        cfg.general.remote_whisper_url,
+        cfg.general.cf_access_client_id ?? "",
+        cfSecretInput || null,
+      );
       setProbe({ kind: "ok", message: msg });
     } catch (e) {
       setProbe({ kind: "error", message: String(e) });
+    }
+  };
+
+  const saveCfSecret = async () => {
+    try {
+      await ipc.setCfAccessSecret(cfSecretInput);
+      setCfSecretStored(cfSecretInput.length > 0);
+      setCfSecretInput("");
+      setProbe({ kind: "idle" });
+    } catch (e) {
+      alert("Speichern fehlgeschlagen: " + String(e));
     }
   };
 
@@ -85,12 +103,27 @@ export default function General() {
       <label>History-Länge<InfoTip enabled={showTips} text="Wie viele Transkripte im History-Tab aufbewahrt werden. Ältere werden automatisch gelöscht." />
         <input type="number" value={cfg.general.history_limit}
         onChange={e => save({ history_limit: parseInt(e.target.value) || 100 })} /></label>
-      <label>GPU-Server-Adresse (für Backend „GPU-Server")<InfoTip enabled={showTips} text="Root-URL des OpenAI-kompatiblen Whisper-Servers (z. B. faster-whisper-server im LAN). Dictatr ruft /v1/audio/transcriptions an dieser Adresse auf." />
+      <label>GPU-Server-Adresse (für Backend „GPU-Server")<InfoTip enabled={showTips} text="Root-URL des OpenAI-kompatiblen Whisper-Servers (z. B. faster-whisper-server im LAN). Dictatr ruft /v1/audio/transcriptions an dieser Adresse auf. Schema kann weggelassen werden — ohne Präfix wird https:// angenommen." />
         <input value={cfg.general.remote_whisper_url}
           onChange={e => { save({ remote_whisper_url: e.target.value }); setProbe({ kind: "idle" }); }}
-          placeholder="http://whisper:8000" />
+          placeholder="whisper.example.com oder http://192.168.1.5:8000" />
         <small style={{ color: "#888" }}>Änderung greift nach App-Neustart.</small>
       </label>
+      <label>Cloudflare Access Client-ID (optional)<InfoTip enabled={showTips} text="Für Server hinter Cloudflare Access mit Service-Token: trage hier die Client-ID aus dem Service-Token ein. Leer lassen, wenn der Server ohne Cloudflare Access läuft." />
+        <input value={cfg.general.cf_access_client_id ?? ""}
+          onChange={e => { save({ cf_access_client_id: e.target.value }); setProbe({ kind: "idle" }); }}
+          placeholder="xxxxxxxxxxxx.access" />
+      </label>
+      <label>Cloudflare Access Client-Secret<InfoTip enabled={showTips} text="Das zugehörige Service-Token-Secret. Wird im OS-Keyring gespeichert, nicht in der config.json. Leer lassen und auf Speichern klicken, um ein gespeichertes Secret zu löschen." />
+        <input type="password"
+          value={cfSecretInput}
+          onChange={e => setCfSecretInput(e.target.value)}
+          placeholder={cfSecretStored ? "●●●●●●●● (gespeichert)" : "Noch nicht gespeichert"} />
+      </label>
+      <div style={{ display: "flex", gap: 8, margin: "0 0 12px" }}>
+        <button onClick={saveCfSecret}>Secret speichern</button>
+        {cfSecretStored && <small style={{ alignSelf: "center", color: "var(--success)" }}>✓ im Keyring</small>}
+      </div>
       <div style={{ margin: "4px 0 12px" }}>
         <button
           className="secondary"

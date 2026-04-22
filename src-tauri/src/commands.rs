@@ -50,6 +50,24 @@ pub fn set_api_key(provider_id: Uuid, key: String) -> std::result::Result<(), St
 }
 
 #[tauri::command]
+pub fn set_cf_access_secret(secret: String) -> std::result::Result<(), String> {
+    if secret.is_empty() {
+        // Ignore "delete if missing" errors — nothing to do if no entry exists.
+        let _ = secrets::delete_named_secret("cf_access_secret");
+        Ok(())
+    } else {
+        secrets::set_named_secret("cf_access_secret", &secret).map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+pub fn has_cf_access_secret() -> bool {
+    secrets::get_named_secret("cf_access_secret")
+        .map(|s| !s.is_empty())
+        .unwrap_or(false)
+}
+
+#[tauri::command]
 pub fn list_input_devices() -> std::result::Result<Vec<String>, String> {
     AudioCapture::list_input_devices().map_err(|e| e.to_string())
 }
@@ -65,20 +83,35 @@ pub fn delete_history(store: State<'_, Arc<HistoryStore>>, id: i64) -> std::resu
 }
 
 #[tauri::command]
-pub async fn test_remote_whisper(url: String) -> std::result::Result<String, String> {
-    let base = url.trim().trim_end_matches('/');
-    if base.is_empty() {
+pub async fn test_remote_whisper(
+    url: String,
+    cf_access_client_id: Option<String>,
+    cf_access_client_secret: Option<String>,
+) -> std::result::Result<String, String> {
+    if url.trim().is_empty() {
         return Err("Keine URL angegeben.".to_string());
     }
-    if !base.starts_with("http://") && !base.starts_with("https://") {
-        return Err("URL muss mit http:// oder https:// beginnen.".to_string());
-    }
+    let base = config::normalize_remote_url(&url);
+    let cf_id = cf_access_client_id.unwrap_or_default();
+    // If the user entered an ID but left the secret field blank, fall back to
+    // the keyring — that's the normal case when they've already saved it.
+    let cf_secret = match cf_access_client_secret {
+        Some(s) if !s.is_empty() => s,
+        _ if !cf_id.is_empty() => secrets::get_named_secret("cf_access_secret").unwrap_or_default(),
+        _ => String::new(),
+    };
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(3))
         .build()
         .map_err(|e| e.to_string())?;
     let probe = format!("{base}/v1/models");
-    let resp = client.get(&probe).send().await.map_err(|e| {
+    let mut req = client.get(&probe);
+    if !cf_id.is_empty() && !cf_secret.is_empty() {
+        req = req
+            .header("CF-Access-Client-Id", &cf_id)
+            .header("CF-Access-Client-Secret", &cf_secret);
+    }
+    let resp = req.send().await.map_err(|e| {
         if e.is_timeout() {
             format!("Timeout nach 3 s — Server nicht erreichbar unter {base}.")
         } else if e.is_connect() {

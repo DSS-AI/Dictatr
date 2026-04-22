@@ -119,12 +119,20 @@ fn main() {
                 }
             }
 
-            let remote_url = std::env::var("DICTATR_REMOTE_URL")
-                .unwrap_or_else(|_| cfg.general.remote_whisper_url.clone());
+            let remote_url = config::normalize_remote_url(
+                &std::env::var("DICTATR_REMOTE_URL")
+                    .unwrap_or_else(|_| cfg.general.remote_whisper_url.clone()),
+            );
             let remote_token = std::env::var("DICTATR_REMOTE_TOKEN").unwrap_or_default();
+            let cf_id = cfg.general.cf_access_client_id.clone();
+            let cf_secret = if !cf_id.is_empty() {
+                secrets::get_named_secret("cf_access_secret").unwrap_or_default()
+            } else {
+                String::new()
+            };
 
             let remote_backend: Arc<dyn TranscriptionBackend> = Arc::new(
-                RemoteWhisperBackend::new(remote_url, remote_token)
+                RemoteWhisperBackend::with_cf_access(remote_url, remote_token, cf_id, cf_secret)
             );
 
             // Pick the first installed ggml-*.bin as the local model, if any.
@@ -256,6 +264,8 @@ fn main() {
             commands::get_config,
             commands::save_config,
             commands::set_api_key,
+            commands::set_cf_access_secret,
+            commands::has_cf_access_secret,
             commands::list_input_devices,
             commands::list_history,
             commands::delete_history,

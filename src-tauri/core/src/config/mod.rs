@@ -20,6 +20,18 @@ fn default_remote_whisper_url() -> String {
     "http://192.168.178.43:8000".to_string()
 }
 
+/// Ensure a user-entered URL has a scheme. Bare hostnames like
+/// `whisper.example.com` get `https://` prepended; IPs on well-known LAN
+/// ports stay `http://` only if the user typed that explicitly.
+pub fn normalize_remote_url(url: &str) -> String {
+    let trimmed = url.trim().trim_end_matches('/');
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        trimmed.to_string()
+    } else {
+        format!("https://{trimmed}")
+    }
+}
+
 fn default_true() -> bool { true }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,6 +44,11 @@ pub struct General {
     pub mic_device: Option<String>,
     #[serde(default = "default_remote_whisper_url")]
     pub remote_whisper_url: String,
+    /// Cloudflare Access service-token Client-ID (public). Paired with a
+    /// secret stored in the OS keyring under `named-cf_access_secret`.
+    /// Empty string or None → no Cloudflare Access headers are sent.
+    #[serde(default)]
+    pub cf_access_client_id: String,
     #[serde(default = "default_true")]
     pub show_tooltips: bool,
     #[serde(default = "default_true")]
@@ -48,6 +65,7 @@ impl Default for General {
             history_limit: 100,
             mic_device: None,
             remote_whisper_url: default_remote_whisper_url(),
+            cf_access_client_id: String::new(),
             show_tooltips: true,
             check_updates: true,
         }
@@ -89,5 +107,19 @@ mod tests {
         let json = serde_json::to_string(&cfg).unwrap();
         let back: AppConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(back.general.max_recording_seconds, 120);
+    }
+
+    #[test]
+    fn normalize_prepends_https_when_no_scheme() {
+        assert_eq!(normalize_remote_url("whisper.example.com"), "https://whisper.example.com");
+        assert_eq!(normalize_remote_url("whisper.example.com/"), "https://whisper.example.com");
+        assert_eq!(normalize_remote_url("  whisper.example.com  "), "https://whisper.example.com");
+    }
+
+    #[test]
+    fn normalize_keeps_explicit_scheme() {
+        assert_eq!(normalize_remote_url("http://192.168.1.5:8000"), "http://192.168.1.5:8000");
+        assert_eq!(normalize_remote_url("https://whisper.example.com"), "https://whisper.example.com");
+        assert_eq!(normalize_remote_url("https://whisper.example.com/"), "https://whisper.example.com");
     }
 }

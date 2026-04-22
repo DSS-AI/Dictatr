@@ -11,8 +11,15 @@ export const ipc = {
   deleteHistory: (id: number) => invoke<void>("delete_history", { id }),
   testLlmProvider: (providerId: string) =>
     invoke<string>("test_llm_provider", { providerId }),
-  testRemoteWhisper: (url: string) =>
-    invoke<string>("test_remote_whisper", { url }),
+  testRemoteWhisper: (url: string, cfId: string, cfSecret: string | null) =>
+    invoke<string>("test_remote_whisper", {
+      url,
+      cfAccessClientId: cfId || null,
+      cfAccessClientSecret: cfSecret,
+    }),
+  setCfAccessSecret: (secret: string) =>
+    invoke<void>("set_cf_access_secret", { secret }),
+  hasCfAccessSecret: () => invoke<boolean>("has_cf_access_secret"),
   startMicPreview: (device: string | null) =>
     invoke<void>("start_mic_preview", { device }),
   stopMicPreview: () => invoke<void>("stop_mic_preview"),

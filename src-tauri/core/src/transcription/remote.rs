@@ -9,6 +9,8 @@ use std::time::Duration;
 pub struct RemoteWhisperBackend {
     base_url: String,
     bearer_token: String,
+    cf_access_client_id: String,
+    cf_access_client_secret: String,
     client: reqwest::Client,
 }
 
@@ -19,6 +21,15 @@ struct DictateResponse {
 
 impl RemoteWhisperBackend {
     pub fn new(base_url: String, bearer_token: String) -> Self {
+        Self::with_cf_access(base_url, bearer_token, String::new(), String::new())
+    }
+
+    pub fn with_cf_access(
+        base_url: String,
+        bearer_token: String,
+        cf_access_client_id: String,
+        cf_access_client_secret: String,
+    ) -> Self {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
             .build()
@@ -26,7 +37,18 @@ impl RemoteWhisperBackend {
         Self {
             base_url,
             bearer_token,
+            cf_access_client_id,
+            cf_access_client_secret,
             client,
+        }
+    }
+
+    fn apply_cf_headers(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        if !self.cf_access_client_id.is_empty() && !self.cf_access_client_secret.is_empty() {
+            req.header("CF-Access-Client-Id", &self.cf_access_client_id)
+                .header("CF-Access-Client-Secret", &self.cf_access_client_secret)
+        } else {
+            req
         }
     }
 
@@ -48,9 +70,8 @@ impl TranscriptionBackend for RemoteWhisperBackend {
     async fn is_available(&self) -> bool {
         // Probe the models endpoint (every OpenAI-compatible server has it).
         let url = format!("{}/v1/models", self.base_url);
-        self.client
-            .get(&url)
-            .timeout(Duration::from_secs(2))
+        let req = self.client.get(&url).timeout(Duration::from_secs(2));
+        self.apply_cf_headers(req)
             .send()
             .await
             .map(|r| r.status().is_success())
@@ -90,6 +111,7 @@ impl TranscriptionBackend for RemoteWhisperBackend {
         if !self.bearer_token.is_empty() {
             req = req.bearer_auth(&self.bearer_token);
         }
+        req = self.apply_cf_headers(req);
         let resp = req
             .multipart(form)
             .send()
