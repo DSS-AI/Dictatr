@@ -53,6 +53,10 @@ pub struct Orchestrator {
     pub mic_device: Option<String>,
     /// Play audio cues on record start/stop when enabled.
     pub sounds_enabled: bool,
+    /// Optional callback invoked after every state change (outside the state
+    /// lock). The host binary uses this to drive UI side-effects such as
+    /// showing the recording overlay, without coupling `dictatr-core` to Tauri.
+    pub state_observer: Option<Arc<dyn Fn(AppState) + Send + Sync>>,
 }
 
 impl Orchestrator {
@@ -64,9 +68,34 @@ impl Orchestrator {
         while let Some(event) = rx.recv().await {
             if let Err(e) = self.handle(event).await {
                 eprintln!("orchestrator error: {e:?}");
-                let mut s = self.state.lock();
-                *s = (*s).apply(Transition::Fail);
+                self.transition(Transition::Fail);
             }
+        }
+    }
+
+    /// Apply a transition, then notify the observer with the resulting state.
+    /// Observer runs *outside* the lock to avoid reentrancy deadlocks.
+    fn transition(&self, t: Transition) -> AppState {
+        let new_state = {
+            let mut s = self.state.lock();
+            *s = (*s).apply(t);
+            *s
+        };
+        if let Some(obs) = self.state_observer.as_ref() {
+            obs(new_state);
+        }
+        new_state
+    }
+
+    /// Force the state to an absolute value (used for bailouts that bypass
+    /// the transition table). Observer runs outside the lock.
+    fn set_state(&self, new: AppState) {
+        {
+            let mut s = self.state.lock();
+            *s = new;
+        }
+        if let Some(obs) = self.state_observer.as_ref() {
+            obs(new);
         }
     }
 
@@ -128,8 +157,7 @@ impl Orchestrator {
         self.audio
             .start_recording(self.mic_device.clone())
             .await?;
-        let mut s = self.state.lock();
-        *s = (*s).apply(Transition::StartRecording);
+        self.transition(Transition::StartRecording);
         Ok(())
     }
 
@@ -139,14 +167,11 @@ impl Orchestrator {
         }
         let samples = self.audio.stop_and_drain().await?;
         eprintln!("[orch] captured {} samples ({:.2}s @16kHz)", samples.len(), samples.len() as f32 / 16000.0);
-        {
-            let mut s = self.state.lock();
-            *s = (*s).apply(Transition::StopRecording);
-        }
+        self.transition(Transition::StopRecording);
 
         if samples.is_empty() {
             eprintln!("[orch] samples empty — skipping transcription");
-            *self.state.lock() = AppState::Idle;
+            self.set_state(AppState::Idle);
             return Ok(());
         }
 
@@ -185,10 +210,7 @@ impl Orchestrator {
             }
         }
 
-        {
-            let mut s = self.state.lock();
-            *s = (*s).apply(Transition::TranscriptionDone);
-        }
+        self.transition(Transition::TranscriptionDone);
 
         // --- Inject -------------------------------------------------------------
         eprintln!("[orch] injecting {} chars: {:?}", final_text.len(), final_text.chars().take(60).collect::<String>());
@@ -205,10 +227,7 @@ impl Orchestrator {
             }
         }
 
-        {
-            let mut s = self.state.lock();
-            *s = (*s).apply(Transition::InjectionDone);
-        }
+        self.transition(Transition::InjectionDone);
 
         // --- Persist to history -------------------------------------------------
         self.history.insert(&HistoryEntry {

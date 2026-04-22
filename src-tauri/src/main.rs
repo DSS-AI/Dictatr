@@ -209,6 +209,30 @@ fn main() {
             app.manage(commands::VocabularyPath(vocab_path));
             let mic_device = cfg.general.mic_device.clone();
 
+            // Recording-indicator overlay: the observer shows/hides the overlay
+            // on state transitions. The overlay itself polls get_audio_level via
+            // IPC invoke — the Tauri v2 event bus (emit/emit_to) turned out to
+            // be unreliable to the webview in this setup (see CHANGELOG v0.1.x
+            // "Mic-Level-Meter"), so all level data goes through the polling
+            // path that LevelMeter.tsx already uses in the main window.
+            let obs_handle = app.handle().clone();
+            let state_observer: Arc<dyn Fn(AppState) + Send + Sync> =
+                Arc::new(move |state: AppState| {
+                    let h = obs_handle.clone();
+                    match state {
+                        AppState::Recording => {
+                            let _ = obs_handle.run_on_main_thread(move || {
+                                let _ = overlay::show(&h);
+                            });
+                        }
+                        _ => {
+                            let _ = obs_handle.run_on_main_thread(move || {
+                                overlay::hide(&h);
+                            });
+                        }
+                    }
+                });
+
             let mut orch = Orchestrator {
                 audio: audio.clone(),
                 profiles: profiles_map,
@@ -222,6 +246,7 @@ fn main() {
                 toggle_active_profile: Arc::new(Mutex::new(None)),
                 mic_device,
                 sounds_enabled: cfg.general.sounds,
+                state_observer: Some(state_observer),
             };
             tauri::async_runtime::spawn(async move { orch.run_loop(rx).await; });
 

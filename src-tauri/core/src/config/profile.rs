@@ -117,6 +117,8 @@ mod tests {
                 enabled: false, llm_provider_id: None, model: None, system_prompt: None,
             },
             llm_transcription: LlmTranscription { llm_provider_id: None, model: None },
+            clipboard_only: false,
+            keep_on_clipboard: false,
         };
         assert!(p.validate().is_err());
     }
@@ -134,6 +136,8 @@ mod tests {
                 enabled: true, llm_provider_id: None, model: None, system_prompt: None,
             },
             llm_transcription: LlmTranscription { llm_provider_id: None, model: None },
+            clipboard_only: false,
+            keep_on_clipboard: false,
         };
         assert!(p.validate().is_err());
     }

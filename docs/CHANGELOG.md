@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Aufnahme-Indikator-Overlay:** Kleines, transparentes Pill-Overlay am unteren Rand des Primary Monitors (320×56, 40 px Bottom-Margin, `alwaysOnTop`, `skipTaskbar`, `focus:false`) wird während jeder laufenden Aufnahme eingeblendet. Zeigt einen pulsierenden roten REC-Dot plus eine symmetrische Oszilloskop-Waveform in Neon-Grün, die live auf den Mikrofon-RMS reagiert (sqrt-Perceptual-Curve, so dass normale Sprache bei ~0.1 RMS sichtbar ausschlägt ohne bei Peaks anzuschlagen). Das Overlay existierte als Window-Shell + HTML-Stub bereits seit Phase 1, war aber nie verdrahtet.
+  - **State-Observer im Core** (`dictatr-core::orchestrator`): Neues optionales `state_observer: Option<Arc<dyn Fn(AppState) + Send + Sync>>`-Feld. Neue interne Helper `transition()` und `set_state()` feuern den Callback nach jeder State-Mutation, **außerhalb** des State-Locks, um Reentranz-Deadlocks auszuschließen. Core bleibt Tauri-frei (reiner `Fn`-Trait-Objekt-Callback).
+  - **Observer-Closure in `main.rs`**: Arc'd Closure reagiert auf `AppState::Recording` → `overlay::show` / sonst → `overlay::hide`, jeweils via `run_on_main_thread`, damit Window-Calls immer auf dem Tauri-Main-Thread landen.
+  - **Positionierung**: `overlay::show` berechnet bei jedem Aufruf die Primary-Monitor-Bottom-Center-Position frisch (inkl. Scale-Factor für HiDPI-Displays); Monitor-Hotplug und DPI-Wechsel werden ohne App-Restart korrekt bedient.
+  - **Level-Transport via Polling, nicht Events:** Der erste Anlauf über `AppHandle::emit("audio://level", rms)` + Event-Listener im Webview war tot — exakt die gleiche Falle wie beim Mic-Level-Meter (siehe Einträge von Phase 1, „Der Tauri v2 Event-Bus kommt in dieser Konstellation nicht zuverlässig im Webview an"). Umstellung auf das bereits bewährte Muster: `overlay.html` pollt alle 30 ms `invoke("get_audio_level")` via `window.__TAURI_INTERNALS__.invoke`. Kein Multi-Entry-Bundling für das Overlay nötig; kein `withGlobalTauri`-Toggle nötig.
+- **Profile-Test-Fixtures repariert:** Die in v0.1.6 ergänzten Felder `clipboard_only` / `keep_on_clipboard` fehlten in zwei Struct-Literals in `profile.rs`' Unit-Tests, wodurch `cargo test -p dictatr-core` seit dem Release nicht mehr durchkompilierte. Tests wieder grün (30/32; der wiremock-basierte `transcribes_against_mock_server` bleibt flaky — nicht Teil dieses Patchs).
+
 ## v0.1.6 — 2026-04-16 — Autostart + Clipboard-Modi
 
 - **Autostart funktioniert jetzt tatsächlich:** `tauri-plugin-autostart` integriert — das Häkchen „Automatisch starten" registriert die App jetzt im Windows-Autostart (Registry `HKCU\...\Run`) bzw. macOS LaunchAgent. Vorher wurde nur ein Flag in der Config gespeichert, ohne OS-Effekt.

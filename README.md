@@ -16,6 +16,7 @@ Remote-Whisper, lokales whisper.cpp und LLM-Provider mit Audio-Input (Gemini 2.5
 - **Wörterbuch**: Ein Begriff pro Zeile, live editierbar (kein Neustart), wird als Hint an Whisper und als Kontext an das Post-Processing-LLM gegeben.
 - **Audio-Preview**: „Mikrofon testen"-Button mit Live-Pegelanzeige im Audio-Tab.
 - **Sound-Cues** beim Aufnahme-Start/-Stopp (aufsteigender/absteigender Zwei-Ton-Chirp).
+- **Aufnahme-Indikator**: Kleines Overlay am unteren Bildschirmrand (Primary Monitor, mittig) zeigt während jeder Aufnahme einen pulsierenden REC-Dot plus eine Oszilloskop-Waveform, die live auf den Mikrofonpegel reagiert. Beim Ende der Aufnahme blendet sich das Overlay aus. Gilt für Push-to-talk und Toggle gleichermaßen.
 - **Zwischenablage-Modi pro Profil**:
   - „Nur in Zwischenablage (kein Auto-Einfügen)" — Text landet nach dem Diktat nur im Clipboard, du fügst selbst mit Strg+V ein. Sinnvoll für Remote-Desktop-Fenster oder elevierte Apps (PowerShell als Admin), in die das automatische Einfügen durch Windows-UIPI oder RDP-Keyboard-Capture nicht durchkommt.
   - „Text ins Clipboard kopieren" — Auto-Einfügen läuft wie gewohnt, aber der transkribierte Text bleibt zusätzlich in der Zwischenablage liegen (normal würde der alte Clipboard-Inhalt wiederhergestellt).
