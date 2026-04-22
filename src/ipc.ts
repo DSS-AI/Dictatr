@@ -11,6 +11,8 @@ export const ipc = {
   deleteHistory: (id: number) => invoke<void>("delete_history", { id }),
   testLlmProvider: (providerId: string) =>
     invoke<string>("test_llm_provider", { providerId }),
+  testRemoteWhisper: (url: string) =>
+    invoke<string>("test_remote_whisper", { url }),
   startMicPreview: (device: string | null) =>
     invoke<void>("start_mic_preview", { device }),
   stopMicPreview: () => invoke<void>("stop_mic_preview"),

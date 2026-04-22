@@ -65,6 +65,58 @@ pub fn delete_history(store: State<'_, Arc<HistoryStore>>, id: i64) -> std::resu
 }
 
 #[tauri::command]
+pub async fn test_remote_whisper(url: String) -> std::result::Result<String, String> {
+    let base = url.trim().trim_end_matches('/');
+    if base.is_empty() {
+        return Err("Keine URL angegeben.".to_string());
+    }
+    if !base.starts_with("http://") && !base.starts_with("https://") {
+        return Err("URL muss mit http:// oder https:// beginnen.".to_string());
+    }
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let probe = format!("{base}/v1/models");
+    let resp = client.get(&probe).send().await.map_err(|e| {
+        if e.is_timeout() {
+            format!("Timeout nach 3 s — Server nicht erreichbar unter {base}.")
+        } else if e.is_connect() {
+            format!("Verbindung abgelehnt oder Host nicht auflösbar: {base}.")
+        } else {
+            format!("Netzwerkfehler: {e}")
+        }
+    })?;
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(format!(
+            "Server antwortet mit HTTP {status} auf /v1/models — kein OpenAI-kompatibler Whisper-Server?"
+        ));
+    }
+    #[derive(serde::Deserialize)]
+    struct Models {
+        data: Option<Vec<Model>>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Model {
+        id: String,
+    }
+    let body: Models = resp.json().await.map_err(|e| {
+        format!("Antwort ist kein gültiges JSON: {e}")
+    })?;
+    let ids: Vec<String> = body
+        .data
+        .unwrap_or_default()
+        .into_iter()
+        .map(|m| m.id)
+        .collect();
+    if ids.is_empty() {
+        return Ok("Erreichbar, aber keine Modelle gelistet.".to_string());
+    }
+    Ok(format!("Erreichbar. Modelle: {}", ids.join(", ")))
+}
+
+#[tauri::command]
 pub async fn test_llm_provider(provider_id: Uuid) -> std::result::Result<String, String> {
     let cfg = config::load().map_err(|e| e.to_string())?;
     let p = cfg.providers.iter().find(|p| p.id == provider_id)

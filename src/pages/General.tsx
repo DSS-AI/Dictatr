@@ -14,10 +14,17 @@ type UpdateState =
   | { kind: "installing"; update: Update; progress: DownloadProgress | null }
   | { kind: "error"; message: string };
 
+type ProbeState =
+  | { kind: "idle" }
+  | { kind: "probing" }
+  | { kind: "ok"; message: string }
+  | { kind: "error"; message: string };
+
 export default function General() {
   const [cfg, setCfg] = useState<AppConfig | null>(null);
   const [version, setVersion] = useState<string>("");
   const [upd, setUpd] = useState<UpdateState>({ kind: "idle" });
+  const [probe, setProbe] = useState<ProbeState>({ kind: "idle" });
 
   useEffect(() => { ipc.getConfig().then(setCfg).catch(console.error); }, []);
   useEffect(() => { getVersion().then(setVersion).catch(() => setVersion("?")); }, []);
@@ -28,6 +35,16 @@ export default function General() {
     const next = { ...cfg, general: { ...cfg.general, ...patch } };
     setCfg(next);
     ipc.saveConfig(next);
+  };
+
+  const runProbe = async () => {
+    setProbe({ kind: "probing" });
+    try {
+      const msg = await ipc.testRemoteWhisper(cfg.general.remote_whisper_url);
+      setProbe({ kind: "ok", message: msg });
+    } catch (e) {
+      setProbe({ kind: "error", message: String(e) });
+    }
   };
 
   const runCheck = async () => {
@@ -70,10 +87,29 @@ export default function General() {
         onChange={e => save({ history_limit: parseInt(e.target.value) || 100 })} /></label>
       <label>GPU-Server-Adresse (für Backend „GPU-Server")<InfoTip enabled={showTips} text="Root-URL des OpenAI-kompatiblen Whisper-Servers (z. B. faster-whisper-server im LAN). Dictatr ruft /v1/audio/transcriptions an dieser Adresse auf." />
         <input value={cfg.general.remote_whisper_url}
-          onChange={e => save({ remote_whisper_url: e.target.value })}
+          onChange={e => { save({ remote_whisper_url: e.target.value }); setProbe({ kind: "idle" }); }}
           placeholder="http://whisper:8000" />
         <small style={{ color: "#888" }}>Änderung greift nach App-Neustart.</small>
       </label>
+      <div style={{ margin: "4px 0 12px" }}>
+        <button
+          className="secondary"
+          onClick={runProbe}
+          disabled={probe.kind === "probing" || !cfg.general.remote_whisper_url.trim()}
+        >
+          {probe.kind === "probing" ? "Teste…" : "Verbindung testen"}
+        </button>
+        {probe.kind === "ok" && (
+          <small style={{ display: "block", marginTop: 6, color: "var(--success)" }}>
+            ✓ {probe.message}
+          </small>
+        )}
+        {probe.kind === "error" && (
+          <small style={{ display: "block", marginTop: 6, color: "#f0a0a0" }}>
+            ✗ {probe.message}
+          </small>
+        )}
+      </div>
 
       <fieldset>
         <legend>Updates</legend>

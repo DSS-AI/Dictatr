@@ -260,6 +260,7 @@ fn main() {
             commands::list_history,
             commands::delete_history,
             commands::test_llm_provider,
+            commands::test_remote_whisper,
             commands::start_mic_preview,
             commands::stop_mic_preview,
             commands::get_audio_level,
