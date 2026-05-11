@@ -145,7 +145,7 @@ cd src-tauri && cargo test -p dictatr-core
 bunx tsc --noEmit
 ```
 
-Stand Phase 1 MVP: **24 Rust-Unit-Tests grün** (Ringbuffer, Resample, State-Machine, Hotkey-Parsing, Config-Serde, Profile-Validation, History, Prompt-Builder, wiremock für RemoteWhisper + OpenAI-compat). TS-Check 0 Fehler.
+Stand v0.1.7: **30 von 32 Rust-Unit-Tests grün** (Ringbuffer, Resample, State-Machine, Hotkey-Parsing, Config-Serde, Profile-Validation, History, Prompt-Builder, wiremock für RemoteWhisper + OpenAI-compat, Whisper-Post-Filter wie `collapse_repetitions`/`strip_trailing_hallucinations`). Der wiremock-basierte `transcribes_against_mock_server` bleibt flaky. TS-Check 0 Fehler.
 
 ---
 
@@ -207,7 +207,8 @@ MSI wurde via `bun run tauri build` auf dem Windows-Host erstellt, auf einem fri
 - **Branch-Strategie:** `master` enthält den initialen Template-Stand + Design-Docs. `feat/phase1-mvp` ist der aktuelle Arbeitszweig. PR/Merge nach Windows-Build-Verifikation.
 - **Build-Abhängigkeiten auf Linux:** cpal braucht `libasound2-dev`, enigo braucht `libxdo-dev`, whisper-rs braucht `cmake` + `clang` + `libclang-dev` (nicht alle auf diesem Debian-Host installiert — Builds auf Windows-Host verschieben, wo MSVC alles mitbringt).
 - **Vom NAS-Mount bauen ist verboten:** Build-Artefakte gehören nicht auf die NAS (Locking + Performance). Unter Windows lokal nach `C:\Dev\Dictatr\` klonen.
-- **DSS-V-A-Transcribe bleibt unangetastet:** Das Remote-Whisper-Backend spricht gegen den bestehenden Port 8503 als reinen API-Konsumenten. Am DSS-V-A-Transcribe-Code wird von diesem Projekt aus nichts geändert.
+- **DSS-V-A-Transcribe bleibt unangetastet:** Das Remote-Whisper-Backend spricht den OpenAI-kompatiblen `faster-whisper-server` (speaches) an — Container `dss-v-a-transcribe-whisper-1` aus der DSS-V-A-Transcribe-Compose-Stack, erreichbar unter `http://192.168.178.43:8000/v1/audio/transcriptions` (GPU, RTX 5090). **Nicht** Port 8503 — das ist die Streamlit-App ohne `/v1/audio/transcriptions`-Endpoint. Am DSS-V-A-Transcribe-Code wird von diesem Projekt aus nichts geändert.
+- **Wenn das Remote-Backend `error sending request for url`/Connection-Fehler liefert:** auf dem Debian-Host prüfen — `docker ps -a | grep whisper` (Container down?), `docker logs dss-v-a-transcribe-whisper-1` (häufig `CUDA out of memory`, weil die RTX 5090 mit SD/LLM geteilt wird), und `nvidia-smi` (bei `Driver/library version mismatch` nach `apt upgrade` ist ein Host-Reboot fällig — DKMS baut das neue Modul, geladenes ≠ installiertes bis zum Neustart). Sofort-Workaround ohne Server: in Dictatr lokales Whisper-Modell laden (Tab „Modelle"), App neu starten, Profil-Backend auf „Lokal".
 
 ---
 
