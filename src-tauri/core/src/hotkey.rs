@@ -14,6 +14,13 @@ pub enum HotkeyEvent {
     Released(Uuid),
 }
 
+/// Sentinel "profile id" used to register the Prompt-Manager quick-pick hotkey
+/// through the same registry/pump path as profile hotkeys. The orchestrator
+/// intercepts events carrying this id and invokes its prompt-manager callback
+/// instead of treating it as a dictation profile. Fixed constant the frontend's
+/// `crypto.randomUUID` can never produce.
+pub const PROMPT_MANAGER_ID: Uuid = Uuid::from_u128(0xD1C7A772_0000_4000_8000_000000000001);
+
 /// Thread-safe map of global-hotkey IDs → profile IDs. Shared between the
 /// hotkey-owner thread (writes on reload) and the pump thread (reads on event).
 pub type SharedIdMap = Arc<Mutex<HashMap<u32, Uuid>>>;
@@ -42,9 +49,18 @@ impl HotkeyRegistry {
     }
 
     pub fn register(&mut self, profile_id: Uuid, combo: &str) -> Result<()> {
-        // Multimedia / launch keys go through the low-level hook, which is
-        // the only reliable way to intercept them on Windows.
-        if let Some(vk) = crate::hotkey_ll::parse_vk(combo) {
+        // Two classes of keys go through the low-level hook instead of
+        // RegisterHotKey:
+        //   * multimedia / launch keys — the only reliable way to intercept
+        //     them on Windows;
+        //   * bare function keys (F1–F24) — the hook delivers clean key-up
+        //     events (so push-to-talk's "release = stop" works, which
+        //     RegisterHotKey does not provide reliably) and fires even when a
+        //     console/terminal window has focus and would otherwise eat the key.
+        // Modifier combos (e.g. Ctrl+F8) keep using RegisterHotKey.
+        if let Some(vk) = crate::hotkey_ll::parse_vk(combo)
+            .or_else(|| crate::hotkey_ll::parse_function_vk(combo))
+        {
             self.ll_keys.insert(vk, profile_id);
             return Ok(());
         }

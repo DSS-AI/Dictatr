@@ -145,7 +145,7 @@ cd src-tauri && cargo test -p dictatr-core
 bunx tsc --noEmit
 ```
 
-Stand v0.1.7: **30 von 32 Rust-Unit-Tests grün** (Ringbuffer, Resample, State-Machine, Hotkey-Parsing, Config-Serde, Profile-Validation, History, Prompt-Builder, wiremock für RemoteWhisper + OpenAI-compat, Whisper-Post-Filter wie `collapse_repetitions`/`strip_trailing_hallucinations`). Der wiremock-basierte `transcribes_against_mock_server` bleibt flaky. TS-Check 0 Fehler.
+Stand v0.1.9: **32 von 33 Rust-Unit-Tests grün** (1 ignored) (Ringbuffer, Resample, State-Machine, Hotkey-Parsing, Config-Serde, Profile-Validation, History, Prompt-Builder, wiremock für RemoteWhisper + OpenAI-compat, Whisper-Post-Filter wie `collapse_repetitions`/`strip_trailing_hallucinations`). Der wiremock-basierte `transcribes_against_mock_server` bleibt flaky. TS-Check 0 Fehler.
 
 ---
 
@@ -209,6 +209,8 @@ MSI wurde via `bun run tauri build` auf dem Windows-Host erstellt, auf einem fri
 - **Vom NAS-Mount bauen ist verboten:** Build-Artefakte gehören nicht auf die NAS (Locking + Performance). Unter Windows lokal nach `C:\Dev\Dictatr\` klonen.
 - **DSS-V-A-Transcribe bleibt unangetastet:** Das Remote-Whisper-Backend spricht den OpenAI-kompatiblen `faster-whisper-server` (speaches) an — Container `dss-v-a-transcribe-whisper-1` aus der DSS-V-A-Transcribe-Compose-Stack, erreichbar unter `http://192.168.178.43:8000/v1/audio/transcriptions` (GPU, RTX 5090). **Nicht** Port 8503 — das ist die Streamlit-App ohne `/v1/audio/transcriptions`-Endpoint. Am DSS-V-A-Transcribe-Code wird von diesem Projekt aus nichts geändert.
 - **Wenn das Remote-Backend `error sending request for url`/Connection-Fehler liefert:** auf dem Debian-Host prüfen — `docker ps -a | grep whisper` (Container down?), `docker logs dss-v-a-transcribe-whisper-1` (häufig `CUDA out of memory`, weil die RTX 5090 mit SD/LLM geteilt wird), und `nvidia-smi` (bei `Driver/library version mismatch` nach `apt upgrade` ist ein Host-Reboot fällig — DKMS baut das neue Modul, geladenes ≠ installiertes bis zum Neustart). Sofort-Workaround ohne Server: in Dictatr lokales Whisper-Modell laden (Tab „Modelle"), App neu starten, Profil-Backend auf „Lokal".
+- **LL-Hook-Dedup & verlorene KeyUps (harter Bug, 2026-06-18):** Wenn eine Hotkey-Aktion den **Vordergrund wechselt** (z.B. ein Fenster öffnet wie der Prompt-Manager), kann Windows das `WM_KEYUP` der Taste verschlucken. Die Auto-Repeat-Dedup im `WH_KEYBOARD_LL`-Hook (`hotkey_ll.rs`) darf sich darauf **nicht** verlassen, dass jedes KeyUp ankommt — sonst bleibt der „gedrückt"-Zustand hängen und der nächste echte Druck wird als Auto-Repeat verschluckt („Hotkey reagiert erst beim zweiten Mal"). Lösung: Auto-Repeat **zeitbasiert** erkennen (`pressed` speichert `Instant`, Schwelle `REPEAT_GAP = 600 ms`), nie über das KeyUp. **Debugging-Lehre:** Bei „Hotkey reagiert nicht zuverlässig" *zuerst* den Event-Pfad am Hook instrumentieren (KeyDown/KeyUp + `pressed`-Status loggen) — **nicht** das Fenster/Fokus-Verhalten. Vordergrund-Trickserei (`AttachThreadInput`/`SetForegroundWindow`-Grab) war hier eine teure Sackgasse.
+- **WebView2-reservierte F-Tasten meiden:** Die Dictatr-UI ist WebView2 — **F7** (Caret Browsing), F1/F3/F5/F11/F12 lösen Browser-Dialoge/Funktionen aus und sollten nicht als Hotkey vorgeschlagen werden. Gut: F6, F8, F9.
 
 ---
 

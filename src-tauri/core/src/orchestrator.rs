@@ -29,8 +29,11 @@ pub struct Orchestrator {
     /// Async-safe handle to the dedicated audio thread (shared so the UI can
     /// also drive a mic-level preview via Tauri state).
     pub audio: Arc<AudioController>,
-    /// All configured profiles, keyed by their UUID.
-    pub profiles: HashMap<Uuid, Profile>,
+    /// All configured profiles, keyed by their UUID. Behind a shared lock so
+    /// the UI can swap in edited profiles live (mode / language / backend /
+    /// post-processing) without an app restart — the hotkey registry already
+    /// reloads live, this keeps the recording behaviour in sync with it.
+    pub profiles: Arc<Mutex<HashMap<Uuid, Profile>>>,
     /// Remote Whisper (server) backend — always available.
     pub remote_backend: Arc<dyn TranscriptionBackend>,
     /// Local whisper.cpp backend — present only if a model file was found.
@@ -57,6 +60,10 @@ pub struct Orchestrator {
     /// lock). The host binary uses this to drive UI side-effects such as
     /// showing the recording overlay, without coupling `dictatr-core` to Tauri.
     pub state_observer: Option<Arc<dyn Fn(AppState) + Send + Sync>>,
+    /// Optional callback invoked when the Prompt-Manager hotkey
+    /// (`hotkey::PROMPT_MANAGER_ID`) is pressed. The host binary wires this to
+    /// show the quick-pick popup window.
+    pub on_prompt_manager: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
 impl Orchestrator {
@@ -105,9 +112,18 @@ impl Orchestrator {
 
     async fn handle(&mut self, event: HotkeyEvent) -> Result<()> {
         match event {
+            // Prompt-Manager hotkey: open the quick-pick popup, never record.
+            HotkeyEvent::Pressed(pid) if pid == crate::hotkey::PROMPT_MANAGER_ID => {
+                if let Some(cb) = self.on_prompt_manager.as_ref() {
+                    cb();
+                }
+            }
+            HotkeyEvent::Released(pid) if pid == crate::hotkey::PROMPT_MANAGER_ID => {}
+
             HotkeyEvent::Pressed(pid) => {
                 let profile = self
                     .profiles
+                    .lock()
                     .get(&pid)
                     .cloned()
                     .ok_or_else(|| AppError::Config(format!("unknown profile {pid}")))?;
@@ -123,6 +139,7 @@ impl Orchestrator {
                             // Already recording → stop and process.
                             let active_profile = self
                                 .profiles
+                                .lock()
                                 .get(&active_pid)
                                 .cloned()
                                 .ok_or_else(|| AppError::Config("toggle profile gone".into()))?;
@@ -137,9 +154,14 @@ impl Orchestrator {
             }
 
             HotkeyEvent::Released(pid) => {
-                let profile = match self.profiles.get(&pid).cloned() {
-                    Some(p) => p,
-                    None => return Ok(()),
+                let profile = {
+                    // Scope the guard so it never crosses the .await below
+                    // (parking_lot's MutexGuard is !Send).
+                    let guard = self.profiles.lock();
+                    match guard.get(&pid).cloned() {
+                        Some(p) => p,
+                        None => return Ok(()),
+                    }
                 };
                 // Only PushToTalk stops on key-release.
                 if matches!(profile.hotkey_mode, HotkeyMode::PushToTalk) {

@@ -31,6 +31,8 @@ export const ipc = {
   deleteModel: (name: string) => invoke<void>("delete_model", { name }),
   getVocabulary: () => invoke<string>("get_vocabulary"),
   saveVocabulary: (text: string) => invoke<void>("save_vocabulary", { text }),
+  pasteTextBlock: (text: string) => invoke<void>("paste_text_block", { text }),
+  hidePromptWindow: () => invoke<void>("hide_prompt_window"),
 };
 
 export interface ModelInfo {

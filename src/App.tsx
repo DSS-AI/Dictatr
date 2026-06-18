@@ -4,6 +4,7 @@ import type { Update } from "@tauri-apps/plugin-updater";
 import Profiles from "./pages/Profiles";
 import Providers from "./pages/Providers";
 import Vocabulary from "./pages/Vocabulary";
+import TextBlocks from "./pages/TextBlocks";
 import Audio from "./pages/Audio";
 import Models from "./pages/Models";
 import General from "./pages/General";
@@ -38,6 +39,7 @@ export default function App() {
           <NavLink to="/profiles">Profile</NavLink>
           <NavLink to="/providers">LLM-Anbieter</NavLink>
           <NavLink to="/vocabulary">Wörterbuch</NavLink>
+          <NavLink to="/textbloecke">Textblöcke</NavLink>
           <NavLink to="/audio">Audio</NavLink>
           <NavLink to="/models">Modelle</NavLink>
           <NavLink to="/general">Allgemein</NavLink>
@@ -50,6 +52,7 @@ export default function App() {
             <Route path="/profiles" element={<Profiles />} />
             <Route path="/providers" element={<Providers />} />
             <Route path="/vocabulary" element={<Vocabulary />} />
+            <Route path="/textbloecke" element={<TextBlocks />} />
             <Route path="/audio" element={<Audio />} />
             <Route path="/models" element={<Models />} />
             <Route path="/general" element={<General />} />

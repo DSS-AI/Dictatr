@@ -3,6 +3,7 @@
 mod commands;
 mod models;
 mod overlay;
+mod prompt_window;
 mod tray;
 
 use dictatr_core::audio::controller::AudioController;
@@ -45,18 +46,40 @@ thread_local! {
         const { std::cell::RefCell::new(None) };
 }
 static HOTKEY_ID_MAP: std::sync::OnceLock<SharedIdMap> = std::sync::OnceLock::new();
+/// Shared handle to the orchestrator's live profile map. Lets `reload_hotkeys`
+/// swap in edited profiles (mode / language / backend / post-processing) the
+/// moment the UI saves, so recording behaviour stays in sync with the hotkeys.
+static ORCH_PROFILES: std::sync::OnceLock<Arc<Mutex<HashMap<Uuid, Profile>>>> =
+    std::sync::OnceLock::new();
 
-pub(crate) fn reload_hotkeys(profiles: &[Profile]) {
+pub(crate) fn reload_hotkeys(profiles: &[Profile], prompt_manager_hotkey: &str) {
     HOTKEY_REGISTRY.with(|cell| {
         if let Some(reg) = cell.borrow_mut().as_mut() {
             reg.clear();
             apply_profiles(reg, profiles);
+            register_prompt_manager_hotkey(reg, prompt_manager_hotkey);
             if let Some(map) = HOTKEY_ID_MAP.get() {
                 *map.lock() = reg.id_map();
             }
             dictatr_core::hotkey_ll::update_mapping(reg.ll_keys());
         }
     });
+    // Push the edited profiles into the running orchestrator (independent of the
+    // hotkey registry, so it works even if the key combo is unchanged).
+    if let Some(shared) = ORCH_PROFILES.get() {
+        *shared.lock() = profiles.iter().map(|p| (p.id, p.clone())).collect();
+    }
+}
+
+/// Register the standalone Prompt-Manager quick-pick hotkey under the sentinel
+/// id, if one is configured. Empty string = feature disabled.
+fn register_prompt_manager_hotkey(registry: &mut HotkeyRegistry, combo: &str) {
+    if combo.is_empty() {
+        return;
+    }
+    if let Err(e) = registry.register(dictatr_core::hotkey::PROMPT_MANAGER_ID, combo) {
+        eprintln!("failed to register prompt-manager hotkey {combo}: {e:?}");
+    }
 }
 
 /// Return the path of the first installed ggml-*.bin under the models dir,
@@ -88,6 +111,11 @@ fn main() {
                     let _ = window.hide();
                 }
             }
+            // The Prompt-Manager popup does NOT auto-close on focus loss: Windows
+            // fires a spurious blur the instant focus settles into the popup's own
+            // webview, and hiding on it made the popup vanish right after opening
+            // (needing a second hotkey press). Closing is explicit — hotkey
+            // toggle, Esc, or picking a block.
         })
         .setup(|app| {
             #[cfg(target_os = "macos")]
@@ -171,8 +199,11 @@ fn main() {
                 }
             }
 
-            let profiles_map: HashMap<Uuid, _> = cfg.profiles.iter()
-                .map(|p| (p.id, p.clone())).collect();
+            let profiles_map: Arc<Mutex<HashMap<Uuid, Profile>>> = Arc::new(Mutex::new(
+                cfg.profiles.iter().map(|p| (p.id, p.clone())).collect(),
+            ));
+            // Share the handle so save_config → reload_hotkeys can update it live.
+            let _ = ORCH_PROFILES.set(profiles_map.clone());
 
             let (tx, rx) = mpsc::unbounded_channel::<HotkeyEvent>();
             let id_map_shared: SharedIdMap = Arc::new(Mutex::new(HashMap::new()));
@@ -190,6 +221,7 @@ fn main() {
             let mut registry = HotkeyRegistry::new()
                 .expect("could not initialize hotkey manager");
             apply_profiles(&mut registry, &cfg.profiles);
+            register_prompt_manager_hotkey(&mut registry, &cfg.general.prompt_manager_hotkey);
             *id_map_shared.lock() = registry.id_map();
 
             // LL hook starts once with the current multimedia-key mapping and
@@ -241,6 +273,16 @@ fn main() {
                     }
                 });
 
+            // Prompt-Manager hotkey opens the quick-pick popup. Window ops must
+            // run on the Tauri main thread, hence run_on_main_thread.
+            let pm_handle = app.handle().clone();
+            let on_prompt_manager: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
+                let h = pm_handle.clone();
+                let _ = pm_handle.run_on_main_thread(move || {
+                    let _ = prompt_window::show(&h);
+                });
+            });
+
             let mut orch = Orchestrator {
                 audio: audio.clone(),
                 profiles: profiles_map,
@@ -255,6 +297,7 @@ fn main() {
                 mic_device,
                 sounds_enabled: cfg.general.sounds,
                 state_observer: Some(state_observer),
+                on_prompt_manager: Some(on_prompt_manager),
             };
             tauri::async_runtime::spawn(async move { orch.run_loop(rx).await; });
 
@@ -276,6 +319,8 @@ fn main() {
             commands::get_audio_level,
             commands::get_vocabulary,
             commands::save_vocabulary,
+            commands::paste_text_block,
+            commands::hide_prompt_window,
             models::get_models_dir,
             models::list_models,
             models::start_model_download,

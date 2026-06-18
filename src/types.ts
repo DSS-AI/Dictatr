@@ -47,12 +47,21 @@ export interface General {
   cf_access_client_id: string;
   show_tooltips: boolean;
   check_updates: boolean;
+  prompt_manager_hotkey: string;
+}
+
+export interface TextBlock {
+  id: string;
+  category: string;
+  title: string;
+  content: string;
 }
 
 export interface AppConfig {
   profiles: Profile[];
   providers: LlmProviderConfig[];
   general: General;
+  text_blocks: TextBlock[];
 }
 
 export interface HistoryEntry {

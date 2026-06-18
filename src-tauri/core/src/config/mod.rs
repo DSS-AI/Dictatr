@@ -1,5 +1,6 @@
 pub mod profile;
 pub mod provider;
+pub mod text_block;
 
 use crate::error::{AppError, Result};
 use directories::ProjectDirs;
@@ -14,6 +15,8 @@ pub struct AppConfig {
     pub providers: Vec<provider::LlmProviderConfig>,
     #[serde(default)]
     pub general: General,
+    #[serde(default)]
+    pub text_blocks: Vec<text_block::TextBlock>,
 }
 
 fn default_remote_whisper_url() -> String {
@@ -53,6 +56,10 @@ pub struct General {
     pub show_tooltips: bool,
     #[serde(default = "default_true")]
     pub check_updates: bool,
+    /// Global hotkey that opens the Prompt-Manager quick-pick popup. Empty
+    /// string = feature disabled (no hotkey registered).
+    #[serde(default)]
+    pub prompt_manager_hotkey: String,
 }
 
 impl Default for General {
@@ -68,6 +75,7 @@ impl Default for General {
             cf_access_client_id: String::new(),
             show_tooltips: true,
             check_updates: true,
+            prompt_manager_hotkey: String::new(),
         }
     }
 }
@@ -107,6 +115,36 @@ mod tests {
         let json = serde_json::to_string(&cfg).unwrap();
         let back: AppConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(back.general.max_recording_seconds, 120);
+    }
+
+    #[test]
+    fn legacy_config_without_text_blocks_loads() {
+        // A config.json written before the Prompt-Manager feature lacks both
+        // `text_blocks` and `general.prompt_manager_hotkey`; serde defaults
+        // must fill them in without error.
+        let legacy = r#"{ "profiles": [], "providers": [], "general": {
+            "autostart": false, "sounds": true, "overlay": true,
+            "max_recording_seconds": 120, "history_limit": 100, "mic_device": null
+        } }"#;
+        let cfg: AppConfig = serde_json::from_str(legacy).unwrap();
+        assert!(cfg.text_blocks.is_empty());
+        assert_eq!(cfg.general.prompt_manager_hotkey, "");
+    }
+
+    #[test]
+    fn text_block_roundtrips() {
+        let mut cfg = AppConfig::default();
+        cfg.text_blocks.push(text_block::TextBlock {
+            id: uuid::Uuid::nil(),
+            category: "Emails".into(),
+            title: "Gruß".into(),
+            content: "Mit freundlichen Grüßen".into(),
+        });
+        cfg.general.prompt_manager_hotkey = "Ctrl+Alt+P".into();
+        let json = serde_json::to_string(&cfg).unwrap();
+        let back: AppConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.text_blocks, cfg.text_blocks);
+        assert_eq!(back.general.prompt_manager_hotkey, "Ctrl+Alt+P");
     }
 
     #[test]

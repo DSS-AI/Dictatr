@@ -6,6 +6,8 @@ use std::path::PathBuf;
 pub struct VocabularyPath(pub PathBuf);
 use dictatr_core::config::{self, provider::ProviderType, AppConfig};
 use dictatr_core::history::{HistoryEntry, HistoryStore};
+use dictatr_core::inject::TextInjector;
+use std::time::Duration;
 use dictatr_core::llm::{
     anthropic::AnthropicProvider, openai_compat::OpenAiCompatProvider, LlmProvider,
 };
@@ -37,11 +39,35 @@ pub fn save_config(
         }
     }
 
+    let pm_hotkey = cfg.general.prompt_manager_hotkey.clone();
     let profiles = cfg.profiles;
     // GlobalHotKeyManager is pinned to the main thread (its HWND only receives
     // WM_HOTKEY on a thread that pumps Win32 messages), so reload there.
-    let _ = app.run_on_main_thread(move || crate::reload_hotkeys(&profiles));
+    let _ = app.run_on_main_thread(move || crate::reload_hotkeys(&profiles, &pm_hotkey));
     Ok(())
+}
+
+/// Copy a Prompt-Manager text block to the clipboard and paste it into the
+/// previously-focused window. Hides the picker first so the target app regains
+/// the foreground, then injects via Ctrl+V (text stays on the clipboard too).
+#[tauri::command]
+pub fn paste_text_block(text: String, app: tauri::AppHandle) -> std::result::Result<(), String> {
+    let h = app.clone();
+    let _ = app.run_on_main_thread(move || crate::prompt_window::hide(&h));
+    // Give Windows a moment to restore focus to the target app before pasting.
+    std::thread::sleep(Duration::from_millis(120));
+    // keep_on_clipboard=true → text remains on the clipboard AND is pasted.
+    match TextInjector::inject(&text, true) {
+        Ok(()) => Ok(()),
+        Err(_) => TextInjector::clipboard_fallback(&text).map_err(|e| e.to_string()),
+    }
+}
+
+/// Close the Prompt-Manager popup without pasting (Esc / cancel).
+#[tauri::command]
+pub fn hide_prompt_window(app: tauri::AppHandle) {
+    let h = app.clone();
+    let _ = app.run_on_main_thread(move || crate::prompt_window::hide(&h));
 }
 
 #[tauri::command]

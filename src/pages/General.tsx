@@ -3,6 +3,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { ipc } from "../ipc";
 import type { AppConfig } from "../types";
 import InfoTip from "../components/InfoTip";
+import HotkeyRecorder from "../components/HotkeyRecorder";
 import { checkForUpdate, installUpdate, type DownloadProgress } from "../lib/updater";
 import type { Update } from "@tauri-apps/plugin-updater";
 
@@ -143,6 +144,25 @@ export default function General() {
           </small>
         )}
       </div>
+
+      <fieldset>
+        <legend>Prompt-Manager</legend>
+        <label>Hotkey zum Öffnen<InfoTip enabled={showTips} text="Globaler Hotkey, der das Prompt-Manager-Popup öffnet: Kategorie wählen, Textblock anklicken → wird ins aktive Fenster eingefügt und liegt in der Zwischenablage. Leer lassen = deaktiviert. Textblöcke verwaltest du im Tab „Textblöcke“." />
+          <HotkeyRecorder
+            value={cfg.general.prompt_manager_hotkey ?? ""}
+            onChange={v => save({ prompt_manager_hotkey: v })}
+          />
+        </label>
+        {cfg.general.prompt_manager_hotkey && (
+          <button
+            className="secondary"
+            style={{ marginTop: 8 }}
+            onClick={() => save({ prompt_manager_hotkey: "" })}
+          >
+            Hotkey entfernen
+          </button>
+        )}
+      </fieldset>
 
       <fieldset>
         <legend>Updates</legend>
