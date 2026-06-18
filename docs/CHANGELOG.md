@@ -1,11 +1,10 @@
 # Dictatr — Änderungs-Log
 
-## Unreleased
+## v0.1.10 — 2026-06-18 — Prompt-Manager + Hotkey-Robustheit
 
-> **Stand 2026-06-18:** End-to-End im laufenden App-Build verifiziert. Prompt-Manager
-> öffnet zuverlässig beim **ersten** Hotkey-Druck, push-to-talk/toggle greifen live.
-> Kompiliert (`cargo check -p dictatr` sauber), Unit-Tests grün (36/37, nur der
-> bekannte flaky `transcribes_against_mock_server` rot). Noch **nicht committet**.
+> End-to-End im laufenden App-Build verifiziert: Prompt-Manager öffnet zuverlässig
+> beim **ersten** Hotkey-Druck, push-to-talk/toggle greifen live. Unit-Tests grün
+> (36/37, nur der bekannte flaky `transcribes_against_mock_server` rot).
 
 - **Prompt-Manager (Textblock-Bibliothek mit Quick-Pick-Hotkey):** Neuer eigener globaler Hotkey öffnet ein schlankes Popup, in dem man in Kategorie-Reitern abgelegte Textblöcke per Klick abruft → wird ins zuvor aktive Fenster eingefügt **und** in die Zwischenablage gelegt. Verwaltung (anlegen/bearbeiten/löschen, frei benennbare Kategorien) im neuen Settings-Tab „Textblöcke".
   - **Storage:** `text_blocks: Vec<TextBlock>` in `AppConfig` (neues Modul `config/text_block.rs`), `general.prompt_manager_hotkey: String`. Beide `#[serde(default)]` → alte `config.json` lädt weiter (Regressionstests `legacy_config_without_text_blocks_loads`, `text_block_roundtrips`).
