@@ -35,6 +35,18 @@ Remote-Whisper, lokales whisper.cpp und LLM-Provider mit Audio-Input (Gemini 2.5
 
 Nach der Installation aktualisiert sich Dictatr bei neuen Releases automatisch (Banner im Settings-Fenster oder Button „Nach Updates suchen" im Allgemein-Tab).
 
+## macOS: Berechtigungen beim ersten Start
+
+macOS verlangt drei Freigaben, bevor Dictatr arbeiten kann. Das ist eine **Sicherheitsvorgabe von Apple** — keine App kann sie selbst setzen, du musst sie einmalig manuell erteilen. Danach merkt sich das System die Freigabe.
+
+1. **Mikrofon** — der Dialog erscheint **automatisch** beim ersten Diktat (oder über „Mikrofon testen" im Audio-Tab). → **Erlauben**.
+2. **Bedienungshilfen** (System­einstellungen → Datenschutz & Sicherheit → Bedienungshilfen) — nötig fürs automatische Einfügen am Cursor (synthetisches Cmd+V). **Dictatr in der Liste einschalten.** Erscheint Dictatr nicht: „**+**" → `Dictatr.app` auswählen.
+3. **Eingabeüberwachung** (gleiche Einstellungs­seite) — nötig für globale Hotkeys. Wird beim ersten Hotkey-Druck abgefragt → **erlauben**.
+
+**Nach dem Erteilen Dictatr einmal neu starten** — Bedienungshilfen/Eingabeüberwachung greifen erst beim nächsten Start.
+
+> **Hinweis zu unsignierten Builds (aktueller Stand):** Solange Dictatr nur ad-hoc signiert (nicht via Apple Developer ID notarisiert) ausgeliefert wird, blockt Gatekeeper den ersten Start („… kann nicht geöffnet werden, weil Apple es nicht prüfen kann"). Workaround: **Rechtsklick auf Dictatr.app → „Öffnen"** (einmalig bestätigen). Auf **macOS 26 beta** kommen die Berechtigungs­dialoge bei ad-hoc-Builds nur durch, wenn der Build mit `./tools/macos-resign.sh` ohne Hardened Runtime re-signiert wurde (siehe [`docs/BUILD-MACOS.md`](docs/BUILD-MACOS.md)). Ein notarisierter Release-Build macht beides überflüssig.
+
 ## Empfohlenes Setup (für deutsches Diktat)
 
 1. **Transkriptions-Backend:** LLM-Chat-Audio mit Gemini 2.5 Flash via OpenRouter (günstig, schnell, sehr robust für Deutsch) oder gpt-4o-audio-preview via OpenAI. Key unter Settings → Provider hinterlegen, Profil auf „LLM (Chat-Audio)" stellen.
@@ -62,7 +74,7 @@ bun run tauri build  # Release (.msi / .dmg)
 Gespeichert in:
 
 - Windows: `%APPDATA%\dss\Dictatr\config\config.json`
-- macOS: `~/Library/Application Support/de.dss.dictatr/config.json`
+- macOS: `~/Library/Application Support/de.dss.Dictatr/config.json`
 
 Modelle in `…\data\models\ggml-*.bin` (Windows) bzw. `…/data/models/` (macOS).
 
