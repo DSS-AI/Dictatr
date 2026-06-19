@@ -102,6 +102,17 @@ fn first_installed_model(dir: &std::path::Path) -> Option<std::path::PathBuf> {
 
 fn main() {
     tauri::Builder::default()
+        // Must be the FIRST plugin: if a second instance launches (e.g. a stale
+        // autostart entry plus a manual open), this callback runs in the already
+        // running instance instead of spinning up a duplicate process. We reveal
+        // and focus the main window so the user lands on the existing app.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
         .on_window_event(|window, event| {
             // Keep the main window alive when the user closes it — hide instead
             // of destroy, so the tray icon can always reopen it.
