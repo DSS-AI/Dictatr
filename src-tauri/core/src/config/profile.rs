@@ -55,6 +55,15 @@ pub struct Profile {
     pub post_processing: PostProcessing,
     #[serde(default = "default_llm_transcription")]
     pub llm_transcription: LlmTranscription,
+    /// If true, only put the text on the clipboard — don't synthesize Ctrl+V.
+    /// Useful for Remote Desktop sessions and other contexts where
+    /// auto-paste isn't delivered to the right target (UIPI, RDP capture).
+    #[serde(default)]
+    pub clipboard_only: bool,
+    /// If true, leave the transcribed text on the clipboard after injection
+    /// (don't restore the user's previous clipboard content).
+    #[serde(default)]
+    pub keep_on_clipboard: bool,
 }
 
 impl Profile {
@@ -108,6 +117,8 @@ mod tests {
                 enabled: false, llm_provider_id: None, model: None, system_prompt: None,
             },
             llm_transcription: LlmTranscription { llm_provider_id: None, model: None },
+            clipboard_only: false,
+            keep_on_clipboard: false,
         };
         assert!(p.validate().is_err());
     }
@@ -125,6 +136,8 @@ mod tests {
                 enabled: true, llm_provider_id: None, model: None, system_prompt: None,
             },
             llm_transcription: LlmTranscription { llm_provider_id: None, model: None },
+            clipboard_only: false,
+            keep_on_clipboard: false,
         };
         assert!(p.validate().is_err());
     }

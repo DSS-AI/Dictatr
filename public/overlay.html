@@ -1,29 +1,145 @@
 <!DOCTYPE html>
-<html><head><meta charset="utf-8"><style>
-  body { margin:0; background:transparent; font-family:sans-serif; color:white; }
-  .pill { background:rgba(0,0,0,.7); border-radius:30px; padding:8px 16px; display:flex; align-items:center; gap:8px; }
-  .dot { width:10px; height:10px; border-radius:50%; background:#ef4444; animation:pulse 1s infinite; }
-  @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.3 } }
-  .meter { flex:1; height:6px; background:rgba(255,255,255,.2); border-radius:3px; overflow:hidden; }
-  .meter-fill { height:100%; background:#10b981; transition:width .05s; }
-</style></head><body>
-  <div class="pill"><div class="dot"></div><div class="meter"><div id="fill" class="meter-fill" style="width:0%"></div></div></div>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+    body {
+      font-family: -apple-system, Segoe UI, sans-serif;
+      color: #e5e7eb;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    .pill {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 14px;
+      background: rgba(12, 12, 14, 0.78);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 28px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+      backdrop-filter: blur(6px);
+    }
+    .rec-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #ef4444;
+      box-shadow: 0 0 6px rgba(239, 68, 68, 0.7);
+      animation: pulse 1s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: 0.45; transform: scale(0.85); }
+    }
+    canvas {
+      display: block;
+      width: 260px;
+      height: 36px;
+    }
+  </style>
+</head>
+<body>
+  <div class="pill">
+    <div class="rec-dot"></div>
+    <canvas id="scope" width="520" height="72"></canvas>
+  </div>
   <script>
-    // Use Tauri 2 global event bridge to listen for audio level updates.
-    // TODO: replace with @tauri-apps/api/event import once bundled into overlay.
     (function () {
-      function tryListen() {
-        if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.listen) {
-          window.__TAURI_INTERNALS__.listen("audio://level", function (e) {
-            var v = Math.min(1, Math.max(0, e.payload * 4));
-            document.getElementById("fill").style.width = (v * 100).toFixed(0) + "%";
-          });
-        } else {
-          // Retry until Tauri internals are ready
-          setTimeout(tryListen, 50);
-        }
+      const canvas = document.getElementById("scope");
+      const ctx = canvas.getContext("2d");
+      const W = canvas.width;
+      const H = canvas.height;
+      const MID = H / 2;
+      const N = 160;
+      const samples = new Array(N).fill(0);
+
+      function pushSample(v) {
+        const clamped = Math.min(1, Math.max(0, v));
+        samples.push(clamped);
+        if (samples.length > N) samples.shift();
       }
-      tryListen();
+
+      function draw() {
+        ctx.clearRect(0, 0, W, H);
+
+        // Midline guide.
+        ctx.strokeStyle = "rgba(16, 185, 129, 0.12)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, MID);
+        ctx.lineTo(W, MID);
+        ctx.stroke();
+
+        // Symmetric oscilloscope waveform.
+        ctx.strokeStyle = "#10b981";
+        ctx.shadowColor = "#10b981";
+        ctx.shadowBlur = 6;
+        ctx.lineWidth = 2;
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+
+        // Normal speech RMS lives around 0.03–0.15. Apply a sqrt curve so
+        // quiet samples get visible amplitude without loud peaks flatlining
+        // at saturation, then scale so ~0.1 RMS reaches ~60% of canvas height.
+        const AMP = MID * 2.6;
+
+        function amp(v) {
+          return Math.min(MID - 1, Math.sqrt(v) * AMP);
+        }
+
+        // Upper edge (mid - amp).
+        ctx.beginPath();
+        for (let i = 0; i < N; i++) {
+          const x = (i / (N - 1)) * W;
+          const y = MID - amp(samples[i]);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        // Lower edge mirrored.
+        ctx.beginPath();
+        for (let i = 0; i < N; i++) {
+          const x = (i / (N - 1)) * W;
+          const y = MID + amp(samples[i]);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        ctx.shadowBlur = 0;
+        requestAnimationFrame(draw);
+      }
+
+      requestAnimationFrame(draw);
+
+      // The Tauri v2 event bus (emit/emit_to) doesn't reach the webview
+      // reliably in this setup — the LevelMeter in the main settings window
+      // runs into the same issue and solves it by polling get_audio_level via
+      // invoke. Same pattern here. __TAURI_INTERNALS__.invoke is always
+      // exposed in Tauri 2 webviews, regardless of withGlobalTauri.
+      function startPolling() {
+        const internals = window.__TAURI_INTERNALS__;
+        if (!internals || typeof internals.invoke !== "function") {
+          setTimeout(startPolling, 50);
+          return;
+        }
+        setInterval(() => {
+          internals.invoke("get_audio_level")
+            .then((v) => pushSample(Number(v) || 0))
+            .catch(() => { /* swallow: overlay stays silent on IPC errors */ });
+        }, 30);
+      }
+      startPolling();
     })();
   </script>
-</body></html>
+</body>
+</html>

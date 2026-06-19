@@ -29,8 +29,11 @@ pub struct Orchestrator {
     /// Async-safe handle to the dedicated audio thread (shared so the UI can
     /// also drive a mic-level preview via Tauri state).
     pub audio: Arc<AudioController>,
-    /// All configured profiles, keyed by their UUID.
-    pub profiles: HashMap<Uuid, Profile>,
+    /// All configured profiles, keyed by their UUID. Behind a shared lock so
+    /// the UI can swap in edited profiles live (mode / language / backend /
+    /// post-processing) without an app restart — the hotkey registry already
+    /// reloads live, this keeps the recording behaviour in sync with it.
+    pub profiles: Arc<Mutex<HashMap<Uuid, Profile>>>,
     /// Remote Whisper (server) backend — always available.
     pub remote_backend: Arc<dyn TranscriptionBackend>,
     /// Local whisper.cpp backend — present only if a model file was found.
@@ -53,6 +56,14 @@ pub struct Orchestrator {
     pub mic_device: Option<String>,
     /// Play audio cues on record start/stop when enabled.
     pub sounds_enabled: bool,
+    /// Optional callback invoked after every state change (outside the state
+    /// lock). The host binary uses this to drive UI side-effects such as
+    /// showing the recording overlay, without coupling `dictatr-core` to Tauri.
+    pub state_observer: Option<Arc<dyn Fn(AppState) + Send + Sync>>,
+    /// Optional callback invoked when the Prompt-Manager hotkey
+    /// (`hotkey::PROMPT_MANAGER_ID`) is pressed. The host binary wires this to
+    /// show the quick-pick popup window.
+    pub on_prompt_manager: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
 impl Orchestrator {
@@ -64,9 +75,34 @@ impl Orchestrator {
         while let Some(event) = rx.recv().await {
             if let Err(e) = self.handle(event).await {
                 eprintln!("orchestrator error: {e:?}");
-                let mut s = self.state.lock();
-                *s = (*s).apply(Transition::Fail);
+                self.transition(Transition::Fail);
             }
+        }
+    }
+
+    /// Apply a transition, then notify the observer with the resulting state.
+    /// Observer runs *outside* the lock to avoid reentrancy deadlocks.
+    fn transition(&self, t: Transition) -> AppState {
+        let new_state = {
+            let mut s = self.state.lock();
+            *s = (*s).apply(t);
+            *s
+        };
+        if let Some(obs) = self.state_observer.as_ref() {
+            obs(new_state);
+        }
+        new_state
+    }
+
+    /// Force the state to an absolute value (used for bailouts that bypass
+    /// the transition table). Observer runs outside the lock.
+    fn set_state(&self, new: AppState) {
+        {
+            let mut s = self.state.lock();
+            *s = new;
+        }
+        if let Some(obs) = self.state_observer.as_ref() {
+            obs(new);
         }
     }
 
@@ -76,9 +112,18 @@ impl Orchestrator {
 
     async fn handle(&mut self, event: HotkeyEvent) -> Result<()> {
         match event {
+            // Prompt-Manager hotkey: open the quick-pick popup, never record.
+            HotkeyEvent::Pressed(pid) if pid == crate::hotkey::PROMPT_MANAGER_ID => {
+                if let Some(cb) = self.on_prompt_manager.as_ref() {
+                    cb();
+                }
+            }
+            HotkeyEvent::Released(pid) if pid == crate::hotkey::PROMPT_MANAGER_ID => {}
+
             HotkeyEvent::Pressed(pid) => {
                 let profile = self
                     .profiles
+                    .lock()
                     .get(&pid)
                     .cloned()
                     .ok_or_else(|| AppError::Config(format!("unknown profile {pid}")))?;
@@ -94,6 +139,7 @@ impl Orchestrator {
                             // Already recording → stop and process.
                             let active_profile = self
                                 .profiles
+                                .lock()
                                 .get(&active_pid)
                                 .cloned()
                                 .ok_or_else(|| AppError::Config("toggle profile gone".into()))?;
@@ -108,9 +154,14 @@ impl Orchestrator {
             }
 
             HotkeyEvent::Released(pid) => {
-                let profile = match self.profiles.get(&pid).cloned() {
-                    Some(p) => p,
-                    None => return Ok(()),
+                let profile = {
+                    // Scope the guard so it never crosses the .await below
+                    // (parking_lot's MutexGuard is !Send).
+                    let guard = self.profiles.lock();
+                    match guard.get(&pid).cloned() {
+                        Some(p) => p,
+                        None => return Ok(()),
+                    }
                 };
                 // Only PushToTalk stops on key-release.
                 if matches!(profile.hotkey_mode, HotkeyMode::PushToTalk) {
@@ -128,8 +179,7 @@ impl Orchestrator {
         self.audio
             .start_recording(self.mic_device.clone())
             .await?;
-        let mut s = self.state.lock();
-        *s = (*s).apply(Transition::StartRecording);
+        self.transition(Transition::StartRecording);
         Ok(())
     }
 
@@ -138,13 +188,12 @@ impl Orchestrator {
             crate::sound::play_stop();
         }
         let samples = self.audio.stop_and_drain().await?;
-        {
-            let mut s = self.state.lock();
-            *s = (*s).apply(Transition::StopRecording);
-        }
+        eprintln!("[orch] captured {} samples ({:.2}s @16kHz)", samples.len(), samples.len() as f32 / 16000.0);
+        self.transition(Transition::StopRecording);
 
         if samples.is_empty() {
-            *self.state.lock() = AppState::Idle;
+            eprintln!("[orch] samples empty — skipping transcription");
+            self.set_state(AppState::Idle);
             return Ok(());
         }
 
@@ -153,9 +202,11 @@ impl Orchestrator {
         // is !Send for parking_lot) doesn't cross the suspension point.
         let vocab_snapshot: Vec<String> = self.vocabulary.lock().clone();
         let backend = self.backend_for(profile)?;
+        eprintln!("[orch] transcribing with backend={}", backend.id());
         let transcription = backend
             .transcribe(&samples, profile.language.clone(), &vocab_snapshot)
             .await?;
+        eprintln!("[orch] transcription done: {} chars, {}ms", transcription.text.len(), transcription.duration_ms);
 
         let mut final_text = transcription.text.clone();
 
@@ -181,21 +232,24 @@ impl Orchestrator {
             }
         }
 
-        {
-            let mut s = self.state.lock();
-            *s = (*s).apply(Transition::TranscriptionDone);
-        }
+        self.transition(Transition::TranscriptionDone);
 
         // --- Inject -------------------------------------------------------------
-        if let Err(e) = TextInjector::inject(&final_text) {
-            eprintln!("injection failed, falling back to clipboard: {e:?}");
+        eprintln!("[orch] injecting {} chars: {:?}", final_text.len(), final_text.chars().take(60).collect::<String>());
+        if profile.clipboard_only {
             TextInjector::clipboard_fallback(&final_text)?;
+            eprintln!("[orch] clipboard-only mode — user pastes manually");
+        } else {
+            match TextInjector::inject(&final_text, profile.keep_on_clipboard) {
+                Ok(()) => eprintln!("[orch] inject OK"),
+                Err(e) => {
+                    eprintln!("injection failed, falling back to clipboard: {e:?}");
+                    TextInjector::clipboard_fallback(&final_text)?;
+                }
+            }
         }
 
-        {
-            let mut s = self.state.lock();
-            *s = (*s).apply(Transition::InjectionDone);
-        }
+        self.transition(Transition::InjectionDone);
 
         // --- Persist to history -------------------------------------------------
         self.history.insert(&HistoryEntry {

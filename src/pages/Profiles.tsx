@@ -23,6 +23,8 @@ export default function Profiles() {
       language: "de",
       post_processing: { enabled: false, llm_provider_id: null, model: null, system_prompt: null },
       llm_transcription: { llm_provider_id: null, model: null },
+      clipboard_only: false,
+      keep_on_clipboard: false,
     };
     save({ ...cfg, profiles: [...cfg.profiles, p] });
   };
@@ -85,6 +87,16 @@ export default function Profiles() {
               <option value="en">Englisch</option>
               <option value="auto">Auto</option>
             </select>
+          </label>
+          <label>
+            <input type="checkbox" checked={p.clipboard_only ?? false}
+              onChange={e => update(i, { clipboard_only: e.target.checked })} />
+            Nur in Zwischenablage (kein Auto-Einfügen)<InfoTip enabled={showTips} text="Text landet nach dem Diktat nur in der Zwischenablage; du fügst ihn selbst mit Strg+V ein. Sinnvoll für Remote-Desktop-Fenster oder elevierte Apps (PowerShell als Admin), in die das automatische Einfügen nicht durchkommt." />
+          </label>
+          <label>
+            <input type="checkbox" checked={p.keep_on_clipboard ?? false}
+              onChange={e => update(i, { keep_on_clipboard: e.target.checked })} />
+            Text ins Clipboard kopieren<InfoTip enabled={showTips} text="Lässt den transkribierten Text nach dem Auto-Einfügen auch in der Zwischenablage liegen (normal wird der vorherige Clipboard-Inhalt wiederhergestellt). Praktisch, wenn du den Text zusätzlich woanders einfügen willst." />
           </label>
           <label>
             <input type="checkbox" checked={p.post_processing.enabled}

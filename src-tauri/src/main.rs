@@ -3,12 +3,14 @@
 mod commands;
 mod models;
 mod overlay;
+mod prompt_window;
 mod tray;
 
 use dictatr_core::audio::controller::AudioController;
 use dictatr_core::config;
 use dictatr_core::history::HistoryStore;
-use dictatr_core::hotkey::{HotkeyEvent, HotkeyRegistry};
+use dictatr_core::config::profile::Profile;
+use dictatr_core::hotkey::{HotkeyEvent, HotkeyRegistry, SharedIdMap};
 use dictatr_core::llm::{anthropic::AnthropicProvider, openai_compat::OpenAiCompatProvider, LlmProvider};
 use dictatr_core::orchestrator::Orchestrator;
 use dictatr_core::secrets;
@@ -23,6 +25,62 @@ use std::sync::Arc;
 use tauri::Manager;
 use tokio::sync::mpsc;
 use uuid::Uuid;
+
+fn apply_profiles(registry: &mut HotkeyRegistry, profiles: &[Profile]) {
+    for p in profiles {
+        if let Err(e) = registry.register(p.id, &p.hotkey) {
+            eprintln!(
+                "failed to register hotkey {} for {}: {:?}",
+                p.hotkey, p.name, e
+            );
+        }
+    }
+}
+
+// The GlobalHotKeyManager creates a hidden HWND that only receives WM_HOTKEY
+// on the thread running a Win32 message pump. Tauri's main thread pumps, so we
+// pin the registry there via a thread_local. The shared id_map lets the pump
+// thread resolve new IDs after a reload without touching the registry itself.
+thread_local! {
+    static HOTKEY_REGISTRY: std::cell::RefCell<Option<HotkeyRegistry>> =
+        const { std::cell::RefCell::new(None) };
+}
+static HOTKEY_ID_MAP: std::sync::OnceLock<SharedIdMap> = std::sync::OnceLock::new();
+/// Shared handle to the orchestrator's live profile map. Lets `reload_hotkeys`
+/// swap in edited profiles (mode / language / backend / post-processing) the
+/// moment the UI saves, so recording behaviour stays in sync with the hotkeys.
+static ORCH_PROFILES: std::sync::OnceLock<Arc<Mutex<HashMap<Uuid, Profile>>>> =
+    std::sync::OnceLock::new();
+
+pub(crate) fn reload_hotkeys(profiles: &[Profile], prompt_manager_hotkey: &str) {
+    HOTKEY_REGISTRY.with(|cell| {
+        if let Some(reg) = cell.borrow_mut().as_mut() {
+            reg.clear();
+            apply_profiles(reg, profiles);
+            register_prompt_manager_hotkey(reg, prompt_manager_hotkey);
+            if let Some(map) = HOTKEY_ID_MAP.get() {
+                *map.lock() = reg.id_map();
+            }
+            dictatr_core::hotkey_ll::update_mapping(reg.ll_keys());
+        }
+    });
+    // Push the edited profiles into the running orchestrator (independent of the
+    // hotkey registry, so it works even if the key combo is unchanged).
+    if let Some(shared) = ORCH_PROFILES.get() {
+        *shared.lock() = profiles.iter().map(|p| (p.id, p.clone())).collect();
+    }
+}
+
+/// Register the standalone Prompt-Manager quick-pick hotkey under the sentinel
+/// id, if one is configured. Empty string = feature disabled.
+fn register_prompt_manager_hotkey(registry: &mut HotkeyRegistry, combo: &str) {
+    if combo.is_empty() {
+        return;
+    }
+    if let Err(e) = registry.register(dictatr_core::hotkey::PROMPT_MANAGER_ID, combo) {
+        eprintln!("failed to register prompt-manager hotkey {combo}: {e:?}");
+    }
+}
 
 /// Return the path of the first installed ggml-*.bin under the models dir,
 /// preferring the largest file (so large-v3 wins over base if both exist).
@@ -44,6 +102,17 @@ fn first_installed_model(dir: &std::path::Path) -> Option<std::path::PathBuf> {
 
 fn main() {
     tauri::Builder::default()
+        // Must be the FIRST plugin: if a second instance launches (e.g. a stale
+        // autostart entry plus a manual open), this callback runs in the already
+        // running instance instead of spinning up a duplicate process. We reveal
+        // and focus the main window so the user lands on the existing app.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
         .on_window_event(|window, event| {
             // Keep the main window alive when the user closes it — hide instead
             // of destroy, so the tray icon can always reopen it.
@@ -53,8 +122,19 @@ fn main() {
                     let _ = window.hide();
                 }
             }
+            // The Prompt-Manager popup does NOT auto-close on focus loss: Windows
+            // fires a spurious blur the instant focus settles into the popup's own
+            // webview, and hiding on it made the popup vanish right after opening
+            // (needing a second hotkey press). Closing is explicit — hotkey
+            // toggle, Esc, or picking a block.
         })
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            {
+                dictatr_core::inject::prompt_microphone_if_needed();
+                dictatr_core::inject::prompt_accessibility_if_needed();
+            }
+
             let handle = app.handle().clone();
             tray::setup(&handle)?;
 
@@ -67,12 +147,31 @@ fn main() {
 
             let cfg = config::load().unwrap_or_default();
 
-            let remote_url = std::env::var("DICTATR_REMOTE_URL")
-                .unwrap_or_else(|_| cfg.general.remote_whisper_url.clone());
+            // Sync autostart registry entry with config
+            {
+                use tauri_plugin_autostart::ManagerExt;
+                let autostart = app.autolaunch();
+                if cfg.general.autostart {
+                    let _ = autostart.enable();
+                } else {
+                    let _ = autostart.disable();
+                }
+            }
+
+            let remote_url = config::normalize_remote_url(
+                &std::env::var("DICTATR_REMOTE_URL")
+                    .unwrap_or_else(|_| cfg.general.remote_whisper_url.clone()),
+            );
             let remote_token = std::env::var("DICTATR_REMOTE_TOKEN").unwrap_or_default();
+            let cf_id = cfg.general.cf_access_client_id.clone();
+            let cf_secret = if !cf_id.is_empty() {
+                secrets::get_named_secret("cf_access_secret").unwrap_or_default()
+            } else {
+                String::new()
+            };
 
             let remote_backend: Arc<dyn TranscriptionBackend> = Arc::new(
-                RemoteWhisperBackend::new(remote_url, remote_token)
+                RemoteWhisperBackend::with_cf_access(remote_url, remote_token, cf_id, cf_secret)
             );
 
             // Pick the first installed ggml-*.bin as the local model, if any.
@@ -111,33 +210,39 @@ fn main() {
                 }
             }
 
-            let profiles_map: HashMap<Uuid, _> = cfg.profiles.iter()
-                .map(|p| (p.id, p.clone())).collect();
-
-            let mut registry = HotkeyRegistry::new()
-                .expect("could not initialize hotkey manager");
-            for p in &cfg.profiles {
-                if let Err(e) = registry.register(p.id, &p.hotkey) {
-                    eprintln!("failed to register hotkey {} for {}: {:?}", p.hotkey, p.name, e);
-                }
-            }
+            let profiles_map: Arc<Mutex<HashMap<Uuid, Profile>>> = Arc::new(Mutex::new(
+                cfg.profiles.iter().map(|p| (p.id, p.clone())).collect(),
+            ));
+            // Share the handle so save_config → reload_hotkeys can update it live.
+            let _ = ORCH_PROFILES.set(profiles_map.clone());
 
             let (tx, rx) = mpsc::unbounded_channel::<HotkeyEvent>();
-            let id_map = registry.id_map();
-            let ll_keys = registry.ll_keys();
-            // GlobalHotKeyManager is !Send (holds an HWND). Keep it alive on the
-            // main thread by leaking it; the pump thread only needs the id map,
-            // since GlobalHotKeyEvent::receiver() is a global channel.
-            let _registry: &'static HotkeyRegistry = Box::leak(Box::new(registry));
-            let tx_pump = tx.clone();
-            std::thread::spawn(move || HotkeyRegistry::pump(id_map, tx_pump));
+            let id_map_shared: SharedIdMap = Arc::new(Mutex::new(HashMap::new()));
+            let _ = HOTKEY_ID_MAP.set(id_map_shared.clone());
 
-            if !ll_keys.is_empty() {
-                match dictatr_core::hotkey_ll::start(ll_keys, tx.clone()) {
-                    Ok(hook) => { Box::leak(Box::new(hook)); }
-                    Err(e) => eprintln!("low-level hotkey hook failed: {e:?}"),
-                }
+            let pump_map = id_map_shared.clone();
+            let pump_tx = tx.clone();
+            std::thread::Builder::new()
+                .name("dictatr-hotkey-pump".into())
+                .spawn(move || HotkeyRegistry::pump_shared(pump_map, pump_tx))
+                .expect("spawn hotkey pump");
+
+            // Manager + HWND live on the Tauri main thread, which pumps Win32
+            // messages for us; reloads come back here via run_on_main_thread.
+            let mut registry = HotkeyRegistry::new()
+                .expect("could not initialize hotkey manager");
+            apply_profiles(&mut registry, &cfg.profiles);
+            register_prompt_manager_hotkey(&mut registry, &cfg.general.prompt_manager_hotkey);
+            *id_map_shared.lock() = registry.id_map();
+
+            // LL hook starts once with the current multimedia-key mapping and
+            // stays alive for the app lifetime; Reload only swaps its mapping.
+            match dictatr_core::hotkey_ll::start(registry.ll_keys(), tx.clone()) {
+                Ok(hook) => { Box::leak(Box::new(hook)); }
+                Err(e) => eprintln!("low-level hotkey hook failed: {e:?}"),
             }
+
+            HOTKEY_REGISTRY.with(|cell| *cell.borrow_mut() = Some(registry));
             drop(tx);
 
             let audio = Arc::new(AudioController::spawn(cfg.general.max_recording_seconds));
@@ -155,6 +260,40 @@ fn main() {
             app.manage(commands::VocabularyPath(vocab_path));
             let mic_device = cfg.general.mic_device.clone();
 
+            // Recording-indicator overlay: the observer shows/hides the overlay
+            // on state transitions. The overlay itself polls get_audio_level via
+            // IPC invoke — the Tauri v2 event bus (emit/emit_to) turned out to
+            // be unreliable to the webview in this setup (see CHANGELOG v0.1.x
+            // "Mic-Level-Meter"), so all level data goes through the polling
+            // path that LevelMeter.tsx already uses in the main window.
+            let obs_handle = app.handle().clone();
+            let state_observer: Arc<dyn Fn(AppState) + Send + Sync> =
+                Arc::new(move |state: AppState| {
+                    let h = obs_handle.clone();
+                    match state {
+                        AppState::Recording => {
+                            let _ = obs_handle.run_on_main_thread(move || {
+                                let _ = overlay::show(&h);
+                            });
+                        }
+                        _ => {
+                            let _ = obs_handle.run_on_main_thread(move || {
+                                overlay::hide(&h);
+                            });
+                        }
+                    }
+                });
+
+            // Prompt-Manager hotkey opens the quick-pick popup. Window ops must
+            // run on the Tauri main thread, hence run_on_main_thread.
+            let pm_handle = app.handle().clone();
+            let on_prompt_manager: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
+                let h = pm_handle.clone();
+                let _ = pm_handle.run_on_main_thread(move || {
+                    let _ = prompt_window::show(&h);
+                });
+            });
+
             let mut orch = Orchestrator {
                 audio: audio.clone(),
                 profiles: profiles_map,
@@ -168,6 +307,8 @@ fn main() {
                 toggle_active_profile: Arc::new(Mutex::new(None)),
                 mic_device,
                 sounds_enabled: cfg.general.sounds,
+                state_observer: Some(state_observer),
+                on_prompt_manager: Some(on_prompt_manager),
             };
             tauri::async_runtime::spawn(async move { orch.run_loop(rx).await; });
 
@@ -177,15 +318,20 @@ fn main() {
             commands::get_config,
             commands::save_config,
             commands::set_api_key,
+            commands::set_cf_access_secret,
+            commands::has_cf_access_secret,
             commands::list_input_devices,
             commands::list_history,
             commands::delete_history,
             commands::test_llm_provider,
+            commands::test_remote_whisper,
             commands::start_mic_preview,
             commands::stop_mic_preview,
             commands::get_audio_level,
             commands::get_vocabulary,
             commands::save_vocabulary,
+            commands::paste_text_block,
+            commands::hide_prompt_window,
             models::get_models_dir,
             models::list_models,
             models::start_model_download,
@@ -195,6 +341,10 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

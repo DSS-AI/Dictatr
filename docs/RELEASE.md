@@ -21,6 +21,20 @@ Auf https://github.com/DSS-AI/Dictatr/settings/secrets/actions folgende **Reposi
 
 Der Public Key muss bereits in `src-tauri/tauri.conf.json` unter `plugins.updater.pubkey` stehen (siehe Schritt 1 im manuellen Prozess unten).
 
+### Pflicht-Konfig in `tauri.conf.json`
+
+- `bundle.createUpdaterArtifacts: true` — **ohne das Flag** tagged `tauri-cli` die `.msi.zip` / `.app.tar.gz`-Bundles nicht als Updater-Artefakte, `tauri-action` meldet `Signature not found for the updater JSON. Skipping upload...` und im Release liegen am Ende nur Binaries, **keine `.sig`-Files und keine `latest.json`**. Bug-Symptom im Client: `Could not fetch a valid release JSON from the remote`. (Genau das war in v0.1.2 passiert — siehe CHANGELOG.)
+- `plugins.updater.endpoints` / `plugins.updater.pubkey` — siehe unten.
+
+### ACL-Capabilities (Pflicht für Tauri 2)
+
+`src-tauri/capabilities/default.json` muss dem Main-Window mindestens `core:default`, `updater:default`, `process:default` granten, sonst:
+
+- `plugin:updater|check` / `plugin:updater|download-and-install` / `plugin:process|restart` brechen mit „not allowed by ACL" ab.
+- `getVersion()` (`core:app:allow-version`) liefert still nichts → Versionsanzeige zeigt `?`.
+
+Die Datei ist im Repo; neue Capabilities ergänzen, wenn Plugin-Commands aus dem Webview nicht greifen.
+
 ### Release raushauen
 
 ```powershell
@@ -68,6 +82,8 @@ Als **User-Environment-Variablen** (Windows: „Systemumgebungsvariablen bearbei
 `bun run tauri build` liest die beiden Variablen und signiert den MSI-Build automatisch.
 
 Für CI (Weg A) den **gleichen Inhalt** zusätzlich als GitHub-Repo-Secrets hinterlegen (siehe oben).
+
+**Gotcha:** Mit `bundle.createUpdaterArtifacts: true` **verlangt** `bun run tauri build` die Env-Vars auch lokal. Fehlen sie, wird die MSI noch fertig gebaut, aber der Bundler-Step danach scheitert mit `A public key has been found, but no private key.` und der Build-Prozess endet mit Exit-Code 1. Die MSI unter `src-tauri/target/release/bundle/msi/Dictatr_*_x64_en-US.msi` ist trotzdem valide und installierbar — nur die `.msi.zip.sig` fehlt.
 
 ---
 
@@ -167,6 +183,7 @@ gh release upload v0.2.0 latest.json
 
 ## Troubleshooting
 
+- **`None of the fallback platforms ["windows-x86_64-msi", "windows-x86_64"] were found in the response platforms object` direkt nach dem Tag-Push:** **Kein Fehler — Timing.** Der Release-Workflow baut eine Matrix (`windows-latest` + `macos-latest`) parallel. Der **macOS-Job ist schneller fertig** (~5 min) und schreibt die `latest.json` **zuerst** — zu dem Zeitpunkt enthält ihr `platforms`-Objekt nur die `darwin-*`-Einträge. Der **Windows-Job dauert länger** (~11 min) und **merged** `windows-x86_64` erst beim Abschluss in dieselbe `latest.json`. Klickt man im Fenster dazwischen auf „Update", findet der Windows-Updater seinen Key noch nicht. **Lösung:** warten, bis **beide** Matrix-Jobs grün sind (`gh run view <id>`), dann erneut „Nach Updates suchen". Verifizieren: `curl -sL https://github.com/DSS-AI/Dictatr/releases/latest/download/latest.json` → `platforms` muss `windows-x86_64` **und** `windows-x86_64-msi` enthalten.
 - **Banner erscheint nicht:** `latest.json` als Release-Asset prüfen, URL in `tauri.conf.json` (`plugins.updater.endpoints`) muss auf diese Datei zeigen. Tauri folgt `releases/latest/download/latest.json` — zeigt immer auf den neuesten Release.
 - **„signature verification failed":** `pubkey` in `tauri.conf.json` passt nicht zum `TAURI_SIGNING_PRIVATE_KEY` des Builds. Pubkey aus `bunx @tauri-apps/cli signer sign --help` bzw. erneut generieren und committen.
 - **Offline-Start:** Update-Check scheitert stillschweigend (nur `console.warn`) — das ist so gewollt, kein Error-Dialog.

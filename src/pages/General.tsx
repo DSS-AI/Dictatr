@@ -3,6 +3,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { ipc } from "../ipc";
 import type { AppConfig } from "../types";
 import InfoTip from "../components/InfoTip";
+import HotkeyRecorder from "../components/HotkeyRecorder";
 import { checkForUpdate, installUpdate, type DownloadProgress } from "../lib/updater";
 import type { Update } from "@tauri-apps/plugin-updater";
 
@@ -14,13 +15,23 @@ type UpdateState =
   | { kind: "installing"; update: Update; progress: DownloadProgress | null }
   | { kind: "error"; message: string };
 
+type ProbeState =
+  | { kind: "idle" }
+  | { kind: "probing" }
+  | { kind: "ok"; message: string }
+  | { kind: "error"; message: string };
+
 export default function General() {
   const [cfg, setCfg] = useState<AppConfig | null>(null);
   const [version, setVersion] = useState<string>("");
   const [upd, setUpd] = useState<UpdateState>({ kind: "idle" });
+  const [probe, setProbe] = useState<ProbeState>({ kind: "idle" });
+  const [cfSecretInput, setCfSecretInput] = useState<string>("");
+  const [cfSecretStored, setCfSecretStored] = useState<boolean>(false);
 
   useEffect(() => { ipc.getConfig().then(setCfg).catch(console.error); }, []);
   useEffect(() => { getVersion().then(setVersion).catch(() => setVersion("?")); }, []);
+  useEffect(() => { ipc.hasCfAccessSecret().then(setCfSecretStored).catch(() => {}); }, []);
 
   if (!cfg) return <div>Lade…</div>;
 
@@ -28,6 +39,31 @@ export default function General() {
     const next = { ...cfg, general: { ...cfg.general, ...patch } };
     setCfg(next);
     ipc.saveConfig(next);
+  };
+
+  const runProbe = async () => {
+    setProbe({ kind: "probing" });
+    try {
+      const msg = await ipc.testRemoteWhisper(
+        cfg.general.remote_whisper_url,
+        cfg.general.cf_access_client_id ?? "",
+        cfSecretInput || null,
+      );
+      setProbe({ kind: "ok", message: msg });
+    } catch (e) {
+      setProbe({ kind: "error", message: String(e) });
+    }
+  };
+
+  const saveCfSecret = async () => {
+    try {
+      await ipc.setCfAccessSecret(cfSecretInput);
+      setCfSecretStored(cfSecretInput.length > 0);
+      setCfSecretInput("");
+      setProbe({ kind: "idle" });
+    } catch (e) {
+      alert("Speichern fehlgeschlagen: " + String(e));
+    }
   };
 
   const runCheck = async () => {
@@ -57,7 +93,7 @@ export default function General() {
   return (
     <div>
       <h1>Allgemein</h1>
-      <label><input type="checkbox" checked={cfg.general.autostart} onChange={e => save({ autostart: e.target.checked })} /> Mit Windows starten<InfoTip enabled={showTips} text="Dictatr beim Login automatisch in den Tray laden (aktuell manuell zu aktivieren via Windows-Autostart-Ordner)." /></label>
+      <label><input type="checkbox" checked={cfg.general.autostart} onChange={e => save({ autostart: e.target.checked })} /> Automatisch starten<InfoTip enabled={showTips} text="Dictatr beim Login automatisch in den Tray laden." /></label>
       <label><input type="checkbox" checked={cfg.general.sounds} onChange={e => save({ sounds: e.target.checked })} /> Sounds abspielen<InfoTip enabled={showTips} text="Kurzer Zwei-Ton-Chirp beim Start (aufsteigend) und Ende (absteigend) der Aufnahme." /></label>
       <label><input type="checkbox" checked={cfg.general.overlay} onChange={e => save({ overlay: e.target.checked })} /> Mini-Overlay einblenden<InfoTip enabled={showTips} text="Während der Aufnahme ein kleines, immer-oben-Fenster mit Status und Pegelanzeige zeigen." /></label>
       <label><input type="checkbox" checked={cfg.general.show_tooltips} onChange={e => save({ show_tooltips: e.target.checked })} /> Hilfe-Tooltips bei Mouse-Over anzeigen</label>
@@ -68,12 +104,65 @@ export default function General() {
       <label>History-Länge<InfoTip enabled={showTips} text="Wie viele Transkripte im History-Tab aufbewahrt werden. Ältere werden automatisch gelöscht." />
         <input type="number" value={cfg.general.history_limit}
         onChange={e => save({ history_limit: parseInt(e.target.value) || 100 })} /></label>
-      <label>GPU-Server-Adresse (für Backend „GPU-Server")<InfoTip enabled={showTips} text="Root-URL des OpenAI-kompatiblen Whisper-Servers (z. B. faster-whisper-server im LAN). Dictatr ruft /v1/audio/transcriptions an dieser Adresse auf." />
+      <label>GPU-Server-Adresse (für Backend „GPU-Server")<InfoTip enabled={showTips} text="Root-URL des OpenAI-kompatiblen Whisper-Servers (z. B. faster-whisper-server im LAN). Dictatr ruft /v1/audio/transcriptions an dieser Adresse auf. Schema kann weggelassen werden — ohne Präfix wird https:// angenommen." />
         <input value={cfg.general.remote_whisper_url}
-          onChange={e => save({ remote_whisper_url: e.target.value })}
-          placeholder="http://whisper:8000" />
+          onChange={e => { save({ remote_whisper_url: e.target.value }); setProbe({ kind: "idle" }); }}
+          placeholder="whisper.example.com oder http://192.168.1.5:8000" />
         <small style={{ color: "#888" }}>Änderung greift nach App-Neustart.</small>
       </label>
+      <label>Cloudflare Access Client-ID (optional)<InfoTip enabled={showTips} text="Für Server hinter Cloudflare Access mit Service-Token: trage hier die Client-ID aus dem Service-Token ein. Leer lassen, wenn der Server ohne Cloudflare Access läuft." />
+        <input value={cfg.general.cf_access_client_id ?? ""}
+          onChange={e => { save({ cf_access_client_id: e.target.value }); setProbe({ kind: "idle" }); }}
+          placeholder="xxxxxxxxxxxx.access" />
+      </label>
+      <label>Cloudflare Access Client-Secret<InfoTip enabled={showTips} text="Das zugehörige Service-Token-Secret. Wird im OS-Keyring gespeichert, nicht in der config.json. Leer lassen und auf Speichern klicken, um ein gespeichertes Secret zu löschen." />
+        <input type="password"
+          value={cfSecretInput}
+          onChange={e => setCfSecretInput(e.target.value)}
+          placeholder={cfSecretStored ? "●●●●●●●● (gespeichert)" : "Noch nicht gespeichert"} />
+      </label>
+      <div style={{ display: "flex", gap: 8, margin: "0 0 12px" }}>
+        <button onClick={saveCfSecret}>Secret speichern</button>
+        {cfSecretStored && <small style={{ alignSelf: "center", color: "var(--success)" }}>✓ im Keyring</small>}
+      </div>
+      <div style={{ margin: "4px 0 12px" }}>
+        <button
+          className="secondary"
+          onClick={runProbe}
+          disabled={probe.kind === "probing" || !cfg.general.remote_whisper_url.trim()}
+        >
+          {probe.kind === "probing" ? "Teste…" : "Verbindung testen"}
+        </button>
+        {probe.kind === "ok" && (
+          <small style={{ display: "block", marginTop: 6, color: "var(--success)" }}>
+            ✓ {probe.message}
+          </small>
+        )}
+        {probe.kind === "error" && (
+          <small style={{ display: "block", marginTop: 6, color: "#f0a0a0" }}>
+            ✗ {probe.message}
+          </small>
+        )}
+      </div>
+
+      <fieldset>
+        <legend>Prompt-Manager</legend>
+        <label>Hotkey zum Öffnen<InfoTip enabled={showTips} text="Globaler Hotkey, der das Prompt-Manager-Popup öffnet: Kategorie wählen, Textblock anklicken → wird ins aktive Fenster eingefügt und liegt in der Zwischenablage. Leer lassen = deaktiviert. Textblöcke verwaltest du im Tab „Textblöcke“." />
+          <HotkeyRecorder
+            value={cfg.general.prompt_manager_hotkey ?? ""}
+            onChange={v => save({ prompt_manager_hotkey: v })}
+          />
+        </label>
+        {cfg.general.prompt_manager_hotkey && (
+          <button
+            className="secondary"
+            style={{ marginTop: 8 }}
+            onClick={() => save({ prompt_manager_hotkey: "" })}
+          >
+            Hotkey entfernen
+          </button>
+        )}
+      </fieldset>
 
       <fieldset>
         <legend>Updates</legend>

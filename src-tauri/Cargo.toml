@@ -4,7 +4,7 @@ resolver = "2"
 
 [package]
 name = "dictatr"
-version = "0.1.1"
+version = "0.1.10"
 description = "Dictatr Dictation App"
 authors = ["DSS-AI"]
 edition = "2021"
@@ -13,10 +13,12 @@ edition = "2021"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon", "image-png", "image-ico"] }
+tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png", "image-ico"] }
 tauri-plugin-shell = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dictatr-core = { path = "core" }

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Dictatr nutzt das Mikrofon, um deine Sprache zu transkribieren.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Dictatr steuert andere Programme, um den transkribierten Text an der Cursor-Position einzufügen.</string>
+    <key>NSAccessibilityUsageDescription</key>
+    <string>Dictatr benötigt Bedienungshilfen, um Text an der Cursor-Position einzufügen.</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>11.0</string>
+</dict>
+</plist>

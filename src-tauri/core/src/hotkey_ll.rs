@@ -27,6 +27,7 @@ mod windows_impl {
     use std::sync::atomic::{AtomicIsize, Ordering};
     use std::sync::OnceLock;
     use std::thread;
+    use std::time::{Duration, Instant};
     use tokio::sync::mpsc::UnboundedSender;
     use uuid::Uuid;
     use windows_sys::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
@@ -37,12 +38,21 @@ mod windows_impl {
         WM_SYSKEYDOWN, WM_SYSKEYUP,
     };
 
+    /// Max gap between consecutive `WM_KEYDOWN`s still treated as auto-repeat of
+    /// the same hold. Anything longer counts as a fresh press. This makes the
+    /// dedup self-healing: if a `WM_KEYUP` is ever lost (Windows can drop it when
+    /// the foreground changes mid-press, e.g. while the popup opens), the stale
+    /// "still held" state can't swallow the next real press — that press arrives
+    /// far later than any auto-repeat. Auto-repeat fires every ~30 ms after the
+    /// initial ~250–500 ms delay, so this window comfortably covers it.
+    const REPEAT_GAP: Duration = Duration::from_millis(600);
+
     struct LlState {
         /// vk-code (low byte of DWORD) → profile id
         mapping: HashMap<u32, Uuid>,
-        /// Tracks which profiles are currently held, to deduplicate
-        /// WM_KEYDOWN auto-repeat events.
-        pressed: HashMap<Uuid, bool>,
+        /// Last `WM_KEYDOWN` instant per profile, used to tell a fresh press from
+        /// a held-key auto-repeat (see `REPEAT_GAP`). Absent = not held.
+        pressed: HashMap<Uuid, Instant>,
         tx: Option<UnboundedSender<HotkeyEvent>>,
     }
 
@@ -121,6 +131,14 @@ mod windows_impl {
         })
     }
 
+    /// Replace the active vk → profile mapping without restarting the hook
+    /// thread. Call from the hotkey-owner thread on profile reload.
+    pub fn update_mapping(new_mapping: HashMap<u32, Uuid>) {
+        let mut s = state().lock();
+        s.mapping = new_mapping;
+        s.pressed.clear();
+    }
+
     unsafe extern "system" fn hook_proc(n_code: i32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
         if n_code != HC_ACTION as i32 {
             return CallNextHookEx(std::ptr::null_mut(), n_code, w_param, l_param);
@@ -137,9 +155,19 @@ mod windows_impl {
         };
 
         if is_down {
-            let already = st.pressed.get(&profile_id).copied().unwrap_or(false);
-            if !already {
-                st.pressed.insert(profile_id, true);
+            let now = Instant::now();
+            // Fresh press if we've never seen this key held, or the previous
+            // keydown was long enough ago that it can't be auto-repeat (so a
+            // lost keyup can't wedge us into "perpetually held").
+            let is_fresh = st
+                .pressed
+                .get(&profile_id)
+                .map(|last| now.duration_since(*last) > REPEAT_GAP)
+                .unwrap_or(true);
+            // Always refresh the timestamp so a continuous hold keeps extending
+            // the auto-repeat window.
+            st.pressed.insert(profile_id, now);
+            if is_fresh {
                 if let Some(tx) = st.tx.as_ref() {
                     let _ = tx.send(HotkeyEvent::Pressed(profile_id));
                 }
@@ -148,7 +176,7 @@ mod windows_impl {
             return 1;
         }
         if is_up {
-            if st.pressed.remove(&profile_id).unwrap_or(false) {
+            if st.pressed.remove(&profile_id).is_some() {
                 if let Some(tx) = st.tx.as_ref() {
                     let _ = tx.send(HotkeyEvent::Released(profile_id));
                 }
@@ -184,6 +212,63 @@ mod windows_impl {
             _ => None,
         }
     }
+
+    /// Parse a bare function-key name (`F1`..`F24`) into its virtual-key code.
+    /// Returns None for anything else — including modifier combos like
+    /// `Ctrl+F8`, which keep using RegisterHotKey. Routing bare function keys
+    /// through the low-level hook gives clean key-up events (reliable
+    /// push-to-talk *and* toggle) and intercepts the key before a focused
+    /// console/terminal can consume it (e.g. F8 = console history search).
+    pub fn parse_function_vk(name: &str) -> Option<u32> {
+        match name.trim() {
+            "F1" => Some(VK_F1 as u32),
+            "F2" => Some(VK_F2 as u32),
+            "F3" => Some(VK_F3 as u32),
+            "F4" => Some(VK_F4 as u32),
+            "F5" => Some(VK_F5 as u32),
+            "F6" => Some(VK_F6 as u32),
+            "F7" => Some(VK_F7 as u32),
+            "F8" => Some(VK_F8 as u32),
+            "F9" => Some(VK_F9 as u32),
+            "F10" => Some(VK_F10 as u32),
+            "F11" => Some(VK_F11 as u32),
+            "F12" => Some(VK_F12 as u32),
+            "F13" => Some(VK_F13 as u32),
+            "F14" => Some(VK_F14 as u32),
+            "F15" => Some(VK_F15 as u32),
+            "F16" => Some(VK_F16 as u32),
+            "F17" => Some(VK_F17 as u32),
+            "F18" => Some(VK_F18 as u32),
+            "F19" => Some(VK_F19 as u32),
+            "F20" => Some(VK_F20 as u32),
+            "F21" => Some(VK_F21 as u32),
+            "F22" => Some(VK_F22 as u32),
+            "F23" => Some(VK_F23 as u32),
+            "F24" => Some(VK_F24 as u32),
+            _ => None,
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn function_keys_map_to_vk() {
+            assert_eq!(parse_function_vk("F8"), Some(VK_F8 as u32));
+            assert_eq!(parse_function_vk("  F9  "), Some(VK_F9 as u32));
+            assert_eq!(parse_function_vk("F24"), Some(VK_F24 as u32));
+        }
+
+        #[test]
+        fn non_function_keys_are_none() {
+            // Modifier combos and plain letters keep using RegisterHotKey.
+            assert_eq!(parse_function_vk("Ctrl+F8"), None);
+            assert_eq!(parse_function_vk("A"), None);
+            assert_eq!(parse_function_vk("Space"), None);
+            assert_eq!(parse_function_vk("F25"), None);
+        }
+    }
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -206,4 +291,10 @@ mod stub {
     pub fn parse_vk(_name: &str) -> Option<u32> {
         None
     }
+
+    pub fn parse_function_vk(_name: &str) -> Option<u32> {
+        None
+    }
+
+    pub fn update_mapping(_new: HashMap<u32, Uuid>) {}
 }

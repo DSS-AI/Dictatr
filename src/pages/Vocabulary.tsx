@@ -39,7 +39,7 @@ export default function Vocabulary() {
       <textarea
         value={text}
         onChange={e => setText(e.target.value)}
-        placeholder={"z.B.\nDSS-Siegmund\nREACNOSTICS\nTauri\nwhisper.cpp"}
+        placeholder={"z.B.\nInvoice Ninja\nISO 10218-1\nwhisper.cpp"}
         style={{ width: "100%", minHeight: 360, fontFamily: "ui-monospace, Consolas, monospace", fontSize: 13 }}
       />
       <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 10 }}>
