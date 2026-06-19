@@ -39,27 +39,78 @@ impl AudioCapture {
     }
 
     pub fn start(&mut self, device_name: Option<&str>) -> Result<()> {
-        if self.stream.is_some() { return Ok(()); }
+        // Always tear down any previous stream and build a brand-new one.
+        // The old `if self.stream.is_some() { return Ok(()) }` early-return
+        // could silently keep a *dead* stream alive after a device change,
+        // system resume, or a still-running mic preview — recording then
+        // drained zero samples and the user got no text with no error. A fresh
+        // stream on every start guarantees a live capture path.
+        self.stop();
+        // Drop any stale samples (e.g. leftover from a mic preview) so a
+        // recording only contains audio captured in this session.
+        self.buffer.lock().clear();
 
         let host = cpal::default_host();
-        let device: Device = match device_name {
-            Some(name) => host.input_devices()
-                .map_err(|e| AppError::Audio(e.to_string()))?
-                .find(|d| d.name().map(|n| n == name).unwrap_or(false))
-                .ok_or_else(|| AppError::Audio(format!("device not found: {}", name)))?,
-            None => host.default_input_device()
-                .ok_or_else(|| AppError::Audio("no default input device".into()))?,
+
+        // Resolve the requested device, falling back to the system default when
+        // the configured device has vanished (renamed, unplugged, or shadowed
+        // by a virtual audio device) instead of failing the whole recording.
+        let device = Self::resolve_device(&host, device_name)
+            .ok_or_else(|| AppError::Audio("no input device available".into()))?;
+
+        // Build + play the stream. If the configured device fails to open, try
+        // the system default once more before giving up.
+        let stream = match Self::build_stream(&device, &self.buffer, &self.level) {
+            Ok(s) => s,
+            Err(e) if device_name.is_some() => {
+                eprintln!("[audio] failed to open configured device: {e} — retrying on default");
+                let fallback = host
+                    .default_input_device()
+                    .ok_or_else(|| AppError::Audio("no default input device".into()))?;
+                Self::build_stream(&fallback, &self.buffer, &self.level)?
+            }
+            Err(e) => return Err(e),
         };
 
-        let config = device.default_input_config()
+        self.stream = Some(stream);
+        Ok(())
+    }
+
+    pub fn stop(&mut self) {
+        self.stream = None;
+    }
+
+    /// Find the requested input device by name, falling back to the system
+    /// default when the name doesn't match any current device. Returns `None`
+    /// only when there is no input device at all.
+    fn resolve_device(host: &cpal::Host, name: Option<&str>) -> Option<Device> {
+        if let Some(name) = name {
+            if let Ok(mut devices) = host.input_devices() {
+                if let Some(d) = devices.find(|d| d.name().map(|n| n == name).unwrap_or(false)) {
+                    return Some(d);
+                }
+            }
+            eprintln!("[audio] configured input '{name}' not found — using default device");
+        }
+        host.default_input_device()
+    }
+
+    /// Build a playing input stream on `device` that feeds `buf`/`level`.
+    fn build_stream(
+        device: &Device,
+        buffer: &Arc<Mutex<RingBuffer>>,
+        level_meter: &Arc<Mutex<f32>>,
+    ) -> Result<Stream> {
+        let config = device
+            .default_input_config()
             .map_err(|e| AppError::Audio(e.to_string()))?;
         let sample_format = config.sample_format();
         let stream_config: StreamConfig = config.clone().into();
         let source_rate = stream_config.sample_rate.0;
         let channels = stream_config.channels as usize;
 
-        let buf = self.buffer.clone();
-        let level = self.level.clone();
+        let buf = buffer.clone();
+        let level = level_meter.clone();
 
         let err_cb = |err| eprintln!("audio stream error: {err}");
 
@@ -81,12 +132,7 @@ impl AudioCapture {
         }.map_err(|e| AppError::Audio(e.to_string()))?;
 
         stream.play().map_err(|e| AppError::Audio(e.to_string()))?;
-        self.stream = Some(stream);
-        Ok(())
-    }
-
-    pub fn stop(&mut self) {
-        self.stream = None;
+        Ok(stream)
     }
 
     fn on_chunk(
